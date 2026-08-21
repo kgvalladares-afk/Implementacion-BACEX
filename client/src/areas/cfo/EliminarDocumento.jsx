@@ -1,0 +1,262 @@
+import { useState, useLayoutEffect, useRef } from "react";
+import { useToast } from "../../components/Toast.jsx";
+import { apiFetch } from "../../apiClient.js";
+import { AUTORIZADORES } from "./autorizadores.js";
+
+export const meta = {
+  label: "Eliminar Documento",
+  icon: "❌",
+  desc: "Buscar y eliminar documentos del sistema mediante Referencia Operativa",
+  kind: "danger",
+};
+
+const currencyFmt = new Intl.NumberFormat("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const dateFmt = new Intl.DateTimeFormat("es-HN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+
+const ESTADO_STYLE = {
+  Habilitado: { background: "#d1fae5", color: "#065f46" },
+  Eliminado: { background: "#fee2e2", color: "#991b1b" },
+};
+const DUENO_STYLE = {
+  Vesta: { background: "#e0e7ff", color: "#3730a3" },
+  Cliente: { background: "#fef3c7", color: "#92400e" },
+};
+
+function Badge({ text, style }) {
+  return (
+    <span style={{
+      display: "inline-block", padding: "3px 9px", borderRadius: "999px",
+      fontSize: "11.5px", fontWeight: "600", whiteSpace: "nowrap",
+      background: style?.background || "#f1f5f9", color: style?.color || "#475569"
+    }}>
+      {text}
+    </span>
+  );
+}
+
+export default function EliminarDocumento() {
+  const [referencia, setReferencia] = useState("");
+  const [autorizador, setAutorizador] = useState("");
+  const [documentos, setDocumentos] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [eliminandoIds, setEliminandoIds] = useState(() => new Set());
+  const showToast = useToast();
+
+  // Proveedor, Cliente y Tipo Documento van fijos a la izquierda, con su ancho real
+  // (sin truncar). Medimos el ancho de cada uno ya renderizado para calcular dónde
+  // debe empezar la columna fija siguiente; si no, se encimarían al hacer scroll.
+  const proveedorRef = useRef(null);
+  const clienteRef = useRef(null);
+  const [leftOffsets, setLeftOffsets] = useState({ proveedor: 0, cliente: 0, tipo: 0 });
+
+  useLayoutEffect(() => {
+    if (documentos.length === 0) return;
+    const proveedorWidth = proveedorRef.current?.offsetWidth || 0;
+    const clienteWidth = clienteRef.current?.offsetWidth || 0;
+    setLeftOffsets({
+      proveedor: 0,
+      cliente: proveedorWidth,
+      tipo: proveedorWidth + clienteWidth,
+    });
+  }, [documentos]);
+
+  const handleBuscar = async () => {
+    if (!referencia.trim()) {
+      showToast("Ingrese una Referencia Operativa para buscar", "warn");
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await apiFetch(`/documentosParaEliminar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ referencia: referencia.trim() })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        showToast(data?.Message || `Error ${response.status} al buscar documentos`, "warn");
+        setDocumentos([]);
+        setSearched(true);
+        return;
+      }
+      setDocumentos(Array.isArray(data) ? data : []);
+      setSearched(true);
+    } catch (error) {
+      showToast("⚠️ Error de conexión con el servidor", "warn");
+      setDocumentos([]);
+      setSearched(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClear = () => {
+    setReferencia("");
+    setAutorizador("");
+    setDocumentos([]);
+    setSearched(false);
+  };
+
+  const handleEliminar = async (doc) => {
+    const documentoId = doc.Documento_ID;
+
+    if (!autorizador) {
+      showToast("Seleccione quién autoriza antes de eliminar", "warn");
+      return;
+    }
+    const motivo = window.prompt("Motivo de la eliminación (obligatorio):");
+    if (!motivo || !motivo.trim()) {
+      showToast("Debe indicar un motivo para eliminar el documento", "warn");
+      return;
+    }
+    if (!window.confirm(`¿Confirma eliminar este documento?\n\nMotivo: ${motivo.trim()}`)) {
+      return;
+    }
+
+    setEliminandoIds((prev) => new Set(prev).add(documentoId));
+    try {
+      const response = await apiFetch(`/eliminarDocumento`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ DocumentoId: documentoId, ModifiedBy: autorizador, Observacion: motivo.trim() })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        showToast(data?.Message || `Error ${response.status} al eliminar el documento`, "warn");
+        return;
+      }
+      setDocumentos((prev) => prev.filter((d) => d.Documento_ID !== documentoId));
+      showToast(data?.Message || "✓ Documento eliminado con éxito", "ok");
+    } catch (error) {
+      showToast("⚠️ Error de conexión con el servidor", "warn");
+    } finally {
+      setEliminandoIds((prev) => {
+        const next = new Set(prev);
+        next.delete(documentoId);
+        return next;
+      });
+    }
+  };
+
+  return (
+    <div className="form-wrap" style={{ position: "relative", zIndex: 1, maxWidth: "100%" }}>
+      <div style={{ borderBottom: "1px solid #eaeaea", paddingBottom: "15px", marginBottom: "25px" }}>
+        <div className="form-title" style={{ fontSize: "22px", fontWeight: "700", color: "#1a1f36" }}>{meta.label}</div>
+        <div className="form-sub" style={{ color: "#697386", marginTop: "4px" }}>{meta.desc}</div>
+      </div>
+
+      <div style={{ background: "#f8f9fa", padding: "20px", borderRadius: "8px", border: "1px solid #e3e8ee", marginBottom: "24px" }}>
+        <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#4f5b66", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+          Filtrar por Referencia Operativa
+        </label>
+        <div style={{ display: "flex", gap: "12px" }}>
+          <div style={{ position: "relative", flex: 1 }}>
+            <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#a3acb9", fontSize: "16px" }}>🔍</span>
+            <input
+              type="text"
+              placeholder="Ingrese la Referencia Operativa..."
+              value={referencia}
+              onChange={(e) => setReferencia(e.target.value)}
+              style={{ width: "100%", padding: "10px 12px 10px 38px", border: "1px solid #dcdfe6", borderRadius: "6px", fontSize: "14px" }}
+              disabled={loading}
+            />
+          </div>
+          <button
+            className="btn primary"
+            onClick={handleBuscar}
+            disabled={loading}
+            style={{ padding: "0 20px" }}
+          >
+            {loading ? "Buscando..." : "Buscar Registros"}
+          </button>
+          <button
+            className="btn ghost"
+            onClick={handleClear}
+            disabled={loading}
+            style={{ padding: "0 20px" }}
+          >
+            Limpiar
+          </button>
+        </div>
+
+        <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#4f5b66", margin: "16px 0 8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+          Autorizado por
+        </label>
+        <select
+          value={autorizador}
+          onChange={(e) => setAutorizador(e.target.value)}
+          style={{ width: "100%", padding: "10px 12px", border: "1px solid #dcdfe6", borderRadius: "6px", fontSize: "14px", background: "#fff" }}
+        >
+          <option value="">Seleccionar...</option>
+          {AUTORIZADORES.map((a) => (
+            <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+        </select>
+      </div>
+
+      {searched && documentos.length === 0 && (
+        <p style={{ color: "#697386", fontSize: "14px" }}>No se encontraron documentos habilitados para esa referencia.</p>
+      )}
+
+      {documentos.length > 0 && (
+        <>
+          <div style={{ marginBottom: "10px" }}>
+            <span style={{ fontSize: "13px", color: "#697386" }}>
+              {documentos.length} documento{documentos.length !== 1 ? "s" : ""} encontrado{documentos.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="doc-table-wrap">
+            <table className="doc-table">
+              <thead>
+                <tr>
+                  <th ref={proveedorRef} className="sticky-col" style={{ left: leftOffsets.proveedor }}>Proveedor</th>
+                  <th ref={clienteRef} className="sticky-col" style={{ left: leftOffsets.cliente }}>Cliente</th>
+                  <th className="sticky-col sticky-col-last" style={{ left: leftOffsets.tipo }}>Tipo Documento</th>
+                  <th>Material</th>
+                  <th>Referencia</th>
+                  <th style={{ textAlign: "right" }}>Monto</th>
+                  <th>Dueño</th>
+                  <th>Estado</th>
+                  <th>Fecha</th>
+                  <th style={{ textAlign: "right" }}>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {documentos.map((doc) => (
+                  <tr key={doc.Documento_ID}>
+                    <td className="sticky-col" style={{ left: leftOffsets.proveedor, fontWeight: "600", color: "#334155" }}>{doc.Proveedor}</td>
+                    <td className="sticky-col" style={{ left: leftOffsets.cliente }}>{doc.Cliente}</td>
+                    <td className="sticky-col sticky-col-last" style={{ left: leftOffsets.tipo }}><Badge text={doc.Tipo_Documento} /></td>
+                    <td>{doc.MaterialProveedor}</td>
+                    <td>{doc.Referencia_Operativa}</td>
+                    <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: "#334155" }}>
+                      {typeof doc.Monto_Documento === "number" ? currencyFmt.format(doc.Monto_Documento) : doc.Monto_Documento}
+                    </td>
+                    <td>
+                      <Badge text={doc.Dueñodocumento_value} style={DUENO_STYLE[doc.Dueñodocumento_value]} />
+                    </td>
+                    <td>
+                      <Badge text={doc.IsSoftDeleted} style={ESTADO_STYLE[doc.IsSoftDeleted]} />
+                    </td>
+                    <td>{doc.Fecha ? dateFmt.format(new Date(doc.Fecha)) : ""}</td>
+                    <td style={{ textAlign: "right" }}>
+                      <button
+                        className="btn danger"
+                        onClick={() => handleEliminar(doc)}
+                        disabled={eliminandoIds.has(doc.Documento_ID)}
+                        style={{ padding: "6px 12px", fontSize: "12px" }}
+                      >
+                        {eliminandoIds.has(doc.Documento_ID) ? "Eliminando..." : "Eliminar"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

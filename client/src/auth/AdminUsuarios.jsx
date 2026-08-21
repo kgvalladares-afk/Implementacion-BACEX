@@ -1,0 +1,311 @@
+import { Fragment, useEffect, useState } from "react";
+import { apiFetch } from "../apiClient.js";
+import { areas } from "../areas/index.js";
+import { useToast } from "../components/Toast.jsx";
+import PasswordField from "../components/PasswordField.jsx";
+
+function permisoKey(area, modulo) {
+  return `${area}:${modulo}`;
+}
+
+function PermisosChecklist({ selected, onChange, disabled }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+      {Object.entries(areas).map(([areaKey, area]) => (
+        <div key={areaKey}>
+          <div style={{ fontSize: "12px", fontWeight: "700", color: "#4f5b66", textTransform: "uppercase", marginBottom: "6px" }}>
+            {area.icon} {area.label}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+            {Object.entries(area.modules).map(([moduloKey, modulo]) => {
+              const key = permisoKey(areaKey, moduloKey);
+              return (
+                <label key={key} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#334155" }}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(key)}
+                    disabled={disabled}
+                    onChange={(e) => onChange(areaKey, moduloKey, e.target.checked)}
+                  />
+                  {modulo.label}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function AdminUsuarios() {
+  const [usuarios, setUsuarios] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const showToast = useToast();
+
+  const [nombreUsuario, setNombreUsuario] = useState("");
+  const [nombreCompleto, setNombreCompleto] = useState("");
+  const [password, setPassword] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [permisos, setPermisos] = useState(() => new Set());
+  const [creando, setCreando] = useState(false);
+
+  const [editingUserId, setEditingUserId] = useState(null);
+  const [editingPermisos, setEditingPermisos] = useState(() => new Set());
+  const [savingPermisos, setSavingPermisos] = useState(false);
+
+  const cargarUsuarios = async () => {
+    setLoading(true);
+    try {
+      const response = await apiFetch("/auth/usuarios");
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        showToast(data?.Message || "No se pudieron cargar los usuarios", "warn");
+        return;
+      }
+      setUsuarios(Array.isArray(data) ? data : []);
+    } catch (error) {
+      showToast("⚠️ Error de conexión con el servidor", "warn");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarUsuarios();
+  }, []);
+
+  const togglePermiso = (area, modulo, checked) => {
+    setPermisos((prev) => {
+      const next = new Set(prev);
+      const key = permisoKey(area, modulo);
+      if (checked) next.add(key); else next.delete(key);
+      return next;
+    });
+  };
+
+  const limpiarFormulario = () => {
+    setNombreUsuario("");
+    setNombreCompleto("");
+    setPassword("");
+    setIsAdmin(false);
+    setPermisos(new Set());
+  };
+
+  const handleCrear = async (e) => {
+    e.preventDefault();
+    if (!nombreUsuario.trim() || !nombreCompleto.trim() || !password) {
+      showToast("Complete usuario, nombre completo y contraseña", "warn");
+      return;
+    }
+    setCreando(true);
+    try {
+      const permisosArray = [...permisos].map((key) => {
+        const [area, modulo] = key.split(":");
+        return { area, modulo };
+      });
+      const response = await apiFetch("/auth/usuarios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nombreUsuario: nombreUsuario.trim(),
+          nombreCompleto: nombreCompleto.trim(),
+          password,
+          isAdmin,
+          permisos: permisosArray
+        })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        showToast(data?.Message || `Error ${response.status} al crear el usuario`, "warn");
+        return;
+      }
+      showToast("✓ Usuario creado con éxito", "ok");
+      limpiarFormulario();
+      cargarUsuarios();
+    } catch (error) {
+      showToast("⚠️ Error de conexión con el servidor", "warn");
+    } finally {
+      setCreando(false);
+    }
+  };
+
+  const toggleEditingPermiso = (area, modulo, checked) => {
+    setEditingPermisos((prev) => {
+      const next = new Set(prev);
+      const key = permisoKey(area, modulo);
+      if (checked) next.add(key); else next.delete(key);
+      return next;
+    });
+  };
+
+  const abrirEdicionPermisos = (usuario) => {
+    setEditingUserId(usuario.id);
+    setEditingPermisos(new Set(usuario.permisos.map((p) => permisoKey(p.area, p.modulo))));
+  };
+
+  const cancelarEdicionPermisos = () => {
+    setEditingUserId(null);
+    setEditingPermisos(new Set());
+  };
+
+  const guardarPermisos = async (usuarioId) => {
+    setSavingPermisos(true);
+    try {
+      const permisosArray = [...editingPermisos].map((key) => {
+        const [area, modulo] = key.split(":");
+        return { area, modulo };
+      });
+      const response = await apiFetch(`/auth/usuarios/${usuarioId}/permisos`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permisos: permisosArray })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        showToast(data?.Message || "No se pudieron actualizar los permisos", "warn");
+        return;
+      }
+      setUsuarios((prev) => prev.map((u) => (u.id === usuarioId ? { ...u, permisos: permisosArray } : u)));
+      showToast("✓ Permisos actualizados", "ok");
+      cancelarEdicionPermisos();
+    } catch (error) {
+      showToast("⚠️ Error de conexión con el servidor", "warn");
+    } finally {
+      setSavingPermisos(false);
+    }
+  };
+
+  const toggleActivo = async (usuario) => {
+    try {
+      const response = await apiFetch(`/auth/usuarios/${usuario.id}/activo`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activo: !usuario.activo })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        showToast(data?.Message || "No se pudo actualizar el usuario", "warn");
+        return;
+      }
+      setUsuarios((prev) => prev.map((u) => (u.id === usuario.id ? { ...u, activo: !u.activo } : u)));
+      showToast(data?.Message || "Actualizado", "ok");
+    } catch (error) {
+      showToast("⚠️ Error de conexión con el servidor", "warn");
+    }
+  };
+
+  return (
+    <div className="form-wrap" style={{ position: "relative", zIndex: 1, maxWidth: "1000px" }}>
+      <div style={{ borderBottom: "1px solid #eaeaea", paddingBottom: "15px", marginBottom: "25px" }}>
+        <div className="form-title" style={{ fontSize: "22px", fontWeight: "700", color: "#1a1f36" }}>Administración de Usuarios</div>
+        <div className="form-sub" style={{ color: "#697386", marginTop: "4px" }}>Crea usuarios y define a qué módulos tiene acceso cada uno</div>
+      </div>
+
+      <form onSubmit={handleCrear} style={{ background: "#f8f9fa", padding: "20px", borderRadius: "8px", border: "1px solid #e3e8ee", marginBottom: "30px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label>Usuario</label>
+            <input type="text" value={nombreUsuario} onChange={(e) => setNombreUsuario(e.target.value)} disabled={creando} />
+          </div>
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label>Nombre completo</label>
+            <input type="text" value={nombreCompleto} onChange={(e) => setNombreCompleto(e.target.value)} disabled={creando} />
+          </div>
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label>Contraseña</label>
+            <PasswordField value={password} onChange={(e) => setPassword(e.target.value)} disabled={creando} />
+          </div>
+          <div className="field" style={{ marginBottom: 0, display: "flex", alignItems: "flex-end" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "500" }}>
+              <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} disabled={creando} />
+              Administrador (acceso a todo, incluida esta pantalla)
+            </label>
+          </div>
+        </div>
+
+        {!isAdmin && (
+          <div style={{ marginBottom: "16px" }}>
+            <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#4f5b66", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Módulos permitidos
+            </label>
+            <PermisosChecklist selected={permisos} onChange={togglePermiso} disabled={creando} />
+          </div>
+        )}
+
+        <button className="btn primary" type="submit" disabled={creando}>
+          {creando ? "Creando..." : "Crear usuario"}
+        </button>
+      </form>
+
+      <h3 style={{ fontSize: "16px", marginBottom: "12px", color: "#1a1f36" }}>Usuarios existentes</h3>
+      {loading ? (
+        <p style={{ color: "#697386", fontSize: "14px" }}>Cargando...</p>
+      ) : usuarios.length === 0 ? (
+        <p style={{ color: "#697386", fontSize: "14px" }}>No hay usuarios registrados todavía.</p>
+      ) : (
+        <div className="doc-table-wrap">
+          <table className="doc-table">
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Nombre completo</th>
+                <th>Tipo</th>
+                <th>Módulos</th>
+                <th>Estado</th>
+                <th style={{ textAlign: "right" }}>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usuarios.map((u) => (
+                <Fragment key={u.id}>
+                  <tr>
+                    <td style={{ fontWeight: "600", color: "#334155" }}>{u.nombreUsuario}</td>
+                    <td>{u.nombreCompleto}</td>
+                    <td>{u.isAdmin ? "Administrador" : "Estándar"}</td>
+                    <td>{u.isAdmin ? "Todos" : (u.permisos.length || "Ninguno")}</td>
+                    <td>{u.activo ? "Activo" : "Inactivo"}</td>
+                    <td style={{ textAlign: "right", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                      <button
+                        className="btn ghost"
+                        onClick={() => (editingUserId === u.id ? cancelarEdicionPermisos() : abrirEdicionPermisos(u))}
+                        style={{ padding: "6px 12px", fontSize: "12px" }}
+                      >
+                        {editingUserId === u.id ? "Cerrar" : "Editar permisos"}
+                      </button>
+                      <button
+                        className={`btn ${u.activo ? "danger" : "primary"}`}
+                        onClick={() => toggleActivo(u)}
+                        style={{ padding: "6px 12px", fontSize: "12px" }}
+                      >
+                        {u.activo ? "Desactivar" : "Activar"}
+                      </button>
+                    </td>
+                  </tr>
+                  {editingUserId === u.id && (
+                    <tr>
+                      <td colSpan={6} style={{ background: "#f8f9fa", padding: "18px" }}>
+                        <div style={{ fontSize: "12px", fontWeight: "700", color: "#4f5b66", textTransform: "uppercase", marginBottom: "12px" }}>
+                          Permisos de {u.nombreCompleto}
+                        </div>
+                        <PermisosChecklist selected={editingPermisos} onChange={toggleEditingPermiso} disabled={savingPermisos} />
+                        <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+                          <button className="btn primary" onClick={() => guardarPermisos(u.id)} disabled={savingPermisos} style={{ padding: "6px 14px", fontSize: "12px" }}>
+                            {savingPermisos ? "Guardando..." : "Guardar permisos"}
+                          </button>
+                          <button className="btn ghost" onClick={cancelarEdicionPermisos} disabled={savingPermisos} style={{ padding: "6px 14px", fontSize: "12px" }}>
+                            Cancelar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
