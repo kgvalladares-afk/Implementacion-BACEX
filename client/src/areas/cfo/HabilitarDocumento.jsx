@@ -11,7 +11,9 @@ export const meta = {
 };
 
 const currencyFmt = new Intl.NumberFormat("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const dateFmt = new Intl.DateTimeFormat("es-HN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+// timeZone: "UTC" evita que el navegador reste el huso horario local: el driver de SQL
+// etiqueta la fecha como UTC aunque en realidad ya es la hora local guardada en la BD.
+const dateFmt = new Intl.DateTimeFormat("es-HN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "UTC" });
 
 const ESTADO_STYLE = {
   Habilitado: { background: "#d1fae5", color: "#065f46" },
