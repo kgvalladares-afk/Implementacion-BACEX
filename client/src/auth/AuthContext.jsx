@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { API_BASE_URL } from "../apiConfig.js";
-import { setAuthToken, setUnauthorizedHandler } from "../apiClient.js";
+import { apiFetch, setAuthToken, setUnauthorizedHandler } from "../apiClient.js";
 
 const AuthContext = createContext(null);
 const STORAGE_KEY = "bacex_session";
@@ -29,6 +29,31 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     setUnauthorizedHandler(logout);
   }, [logout]);
+
+  // Refresca los permisos/estado del usuario contra la BD al cargar la app,
+  // para que cambios hechos por un administrador se vean sin tener que reloguearse.
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await apiFetch("/auth/me");
+        if (!response.ok || cancelled) return;
+        const data = await response.json().catch(() => null);
+        if (!data || cancelled) return;
+        setSession((prev) => {
+          if (!prev) return prev;
+          const updated = { ...prev, usuario: { ...prev.usuario, ...data } };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+          return updated;
+        });
+      } catch {
+        // Si falla, se sigue usando la sesión en caché sin interrumpir al usuario.
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const login = useCallback(async (nombreUsuario, password) => {
     const response = await fetch(`${API_BASE_URL}/auth/login`, {

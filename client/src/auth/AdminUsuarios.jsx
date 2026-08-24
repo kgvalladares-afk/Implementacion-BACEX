@@ -54,6 +54,10 @@ export default function AdminUsuarios() {
   const [editingPermisos, setEditingPermisos] = useState(() => new Set());
   const [savingPermisos, setSavingPermisos] = useState(false);
 
+  const [editingPasswordUserId, setEditingPasswordUserId] = useState(null);
+  const [nuevaPassword, setNuevaPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+
   const cargarUsuarios = async () => {
     setLoading(true);
     try {
@@ -176,6 +180,42 @@ export default function AdminUsuarios() {
     }
   };
 
+  const abrirCambioPassword = (usuario) => {
+    setEditingPasswordUserId(usuario.id);
+    setNuevaPassword("");
+  };
+
+  const cancelarCambioPassword = () => {
+    setEditingPasswordUserId(null);
+    setNuevaPassword("");
+  };
+
+  const guardarPassword = async (usuarioId) => {
+    if (!nuevaPassword || nuevaPassword.length < 6) {
+      showToast("La contraseña debe tener al menos 6 caracteres", "warn");
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      const response = await apiFetch(`/auth/usuarios/${usuarioId}/password`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: nuevaPassword })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        showToast(data?.Message || "No se pudo actualizar la contraseña", "warn");
+        return;
+      }
+      showToast("✓ Contraseña actualizada", "ok");
+      cancelarCambioPassword();
+    } catch (error) {
+      showToast("⚠️ Error de conexión con el servidor", "warn");
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
   const toggleActivo = async (usuario) => {
     try {
       const response = await apiFetch(`/auth/usuarios/${usuario.id}/activo`, {
@@ -274,6 +314,13 @@ export default function AdminUsuarios() {
                         {editingUserId === u.id ? "Cerrar" : "Editar permisos"}
                       </button>
                       <button
+                        className="btn ghost"
+                        onClick={() => (editingPasswordUserId === u.id ? cancelarCambioPassword() : abrirCambioPassword(u))}
+                        style={{ padding: "6px 12px", fontSize: "12px" }}
+                      >
+                        {editingPasswordUserId === u.id ? "Cerrar" : "Cambiar contraseña"}
+                      </button>
+                      <button
                         className={`btn ${u.activo ? "danger" : "primary"}`}
                         onClick={() => toggleActivo(u)}
                         style={{ padding: "6px 12px", fontSize: "12px" }}
@@ -294,6 +341,30 @@ export default function AdminUsuarios() {
                             {savingPermisos ? "Guardando..." : "Guardar permisos"}
                           </button>
                           <button className="btn ghost" onClick={cancelarEdicionPermisos} disabled={savingPermisos} style={{ padding: "6px 14px", fontSize: "12px" }}>
+                            Cancelar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {editingPasswordUserId === u.id && (
+                    <tr>
+                      <td colSpan={6} style={{ background: "#f8f9fa", padding: "18px" }}>
+                        <div style={{ fontSize: "12px", fontWeight: "700", color: "#4f5b66", textTransform: "uppercase", marginBottom: "12px" }}>
+                          Nueva contraseña para {u.nombreCompleto}
+                        </div>
+                        <div style={{ maxWidth: "320px" }}>
+                          <PasswordField
+                            value={nuevaPassword}
+                            onChange={(e) => setNuevaPassword(e.target.value)}
+                            disabled={savingPassword}
+                          />
+                        </div>
+                        <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+                          <button className="btn primary" onClick={() => guardarPassword(u.id)} disabled={savingPassword} style={{ padding: "6px 14px", fontSize: "12px" }}>
+                            {savingPassword ? "Guardando..." : "Guardar contraseña"}
+                          </button>
+                          <button className="btn ghost" onClick={cancelarCambioPassword} disabled={savingPassword} style={{ padding: "6px 14px", fontSize: "12px" }}>
                             Cancelar
                           </button>
                         </div>

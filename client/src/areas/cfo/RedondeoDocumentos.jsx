@@ -29,6 +29,7 @@ export default function RedondeoDocumentos() {
   const [seleccionados, setSeleccionados] = useState(() => new Set());
   const [autorizador, setAutorizador] = useState("");
   const [redondeando, setRedondeando] = useState(false);
+  const [redondeadosIds, setRedondeadosIds] = useState(() => new Set());
   const showToast = useToast();
 
   const handleBuscar = async () => {
@@ -54,6 +55,7 @@ export default function RedondeoDocumentos() {
       setDocumentos(Array.isArray(data) ? data : []);
       setSearched(true);
       setSeleccionados(new Set());
+      setRedondeadosIds(new Set());
     } catch (error) {
       showToast("⚠️ Error de conexión con el servidor", "warn");
       setDocumentos([]);
@@ -69,6 +71,7 @@ export default function RedondeoDocumentos() {
     setSearched(false);
     setSeleccionados(new Set());
     setAutorizador("");
+    setRedondeadosIds(new Set());
   };
 
   const handleToggleSeleccion = (id) => {
@@ -80,7 +83,9 @@ export default function RedondeoDocumentos() {
     });
   };
 
-  const redondeablesIds = documentos.filter((d) => puedeRedondear(d.Monto_Documento)).map((d) => d.Id);
+  const redondeablesIds = documentos
+    .filter((d) => puedeRedondear(d.Monto_Documento) && !redondeadosIds.has(d.Id))
+    .map((d) => d.Id);
 
   const handleToggleTodos = () => {
     if (seleccionados.size === redondeablesIds.length) {
@@ -116,7 +121,11 @@ export default function RedondeoDocumentos() {
         return;
       }
       showToast(data?.Message || "✓ Documentos redondeados con éxito", "ok");
-      setDocumentos((prev) => prev.filter((d) => !seleccionados.has(d.Id)));
+      const idsRedondeados = new Set(seleccionados);
+      setDocumentos((prev) => prev.map((d) =>
+        idsRedondeados.has(d.Id) ? { ...d, Monto_Documento: Math.floor(d.Monto_Documento) } : d
+      ));
+      setRedondeadosIds((prev) => new Set([...prev, ...idsRedondeados]));
       setSeleccionados(new Set());
     } catch (error) {
       showToast("⚠️ Error de conexión con el servidor", "warn");
@@ -221,6 +230,7 @@ export default function RedondeoDocumentos() {
               </thead>
               <tbody>
                 {documentos.map((doc) => {
+                  const yaRedondeado = redondeadosIds.has(doc.Id);
                   const redondeable = puedeRedondear(doc.Monto_Documento);
                   return (
                     <tr key={doc.Id}>
@@ -229,16 +239,19 @@ export default function RedondeoDocumentos() {
                           type="checkbox"
                           checked={seleccionados.has(doc.Id)}
                           onChange={() => handleToggleSeleccion(doc.Id)}
-                          disabled={!redondeable}
+                          disabled={!redondeable || yaRedondeado}
                           title={!redondeable ? "Este documento excede el límite de 3 centavos permitido para redondeo" : undefined}
                         />
                       </td>
                       <td style={{ fontWeight: "600", color: "#334155" }}>{doc.Proveedor}</td>
                       <td>{doc.Cliente}</td>
                       <td>{doc.Tipo_Documento}</td>
-                      <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: redondeable ? "#334155" : "#b91c1c" }}>
+                      <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: yaRedondeado ? "#334155" : redondeable ? "#334155" : "#b91c1c" }}>
                         {typeof doc.Monto_Documento === "number" ? currencyFmt.format(doc.Monto_Documento) : doc.Monto_Documento}
-                        {!redondeable && (
+                        {yaRedondeado && (
+                          <div style={{ fontSize: "11px", fontWeight: "600", color: "#059669" }}>✓ Redondeado</div>
+                        )}
+                        {!yaRedondeado && !redondeable && (
                           <div style={{ fontSize: "11px", fontWeight: "600", color: "#b91c1c" }}>No redondeable</div>
                         )}
                       </td>

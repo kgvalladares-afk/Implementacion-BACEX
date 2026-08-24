@@ -119,6 +119,30 @@ router.put("/usuarios/:id/permisos", requireAuth, requireAdmin, (req, res) => {
     return res.json({ Message: "Permisos actualizados con éxito" });
 });
 
+router.put("/usuarios/:id/password", requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const usuarioId = Number(req.params.id);
+        const { password } = req.body;
+
+        if (!password || password.length < 6) {
+            return res.status(400).json({ Message: "La contraseña debe tener al menos 6 caracteres." });
+        }
+
+        const usuario = authDb.prepare(`SELECT id FROM usuarios WHERE id = ?`).get(usuarioId);
+        if (!usuario) {
+            return res.status(404).json({ Message: "No se encontró el usuario." });
+        }
+
+        const passwordHash = await bcrypt.hash(password, 10);
+        authDb.prepare(`UPDATE usuarios SET password_hash = ? WHERE id = ?`).run(passwordHash, usuarioId);
+
+        return res.json({ Message: "Contraseña actualizada con éxito" });
+    } catch (error) {
+        console.error("Error en actualizar contraseña:", error);
+        return res.status(500).json({ Message: "Error interno del servidor", Error: error.message });
+    }
+});
+
 router.put("/usuarios/:id/activo", requireAuth, requireAdmin, (req, res) => {
     const usuarioId = Number(req.params.id);
     const { activo } = req.body;

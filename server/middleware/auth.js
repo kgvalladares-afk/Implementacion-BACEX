@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { authDb, getPermisosDeUsuario } from "../database/authDb.js";
 
 export function requireAuth(req, res, next) {
   const header = req.headers.authorization;
@@ -6,7 +7,25 @@ export function requireAuth(req, res, next) {
     return res.status(401).json({ Message: "No autenticado." });
   }
   try {
-    req.user = jwt.verify(header.slice(7), process.env.JWT_SECRET);
+    const payload = jwt.verify(header.slice(7), process.env.JWT_SECRET);
+
+    // Los permisos y el estado se leen siempre de la BD (no del token) para que
+    // los cambios hechos por un administrador surtan efecto de inmediato,
+    // sin esperar a que la sesión expire o el usuario vuelva a iniciar sesión.
+    const user = authDb
+      .prepare(`SELECT id, nombre_usuario, is_admin, activo FROM usuarios WHERE id = ?`)
+      .get(payload.id);
+
+    if (!user || !user.activo) {
+      return res.status(401).json({ Message: "Sesión inválida o expirada." });
+    }
+
+    req.user = {
+      id: user.id,
+      nombreUsuario: user.nombre_usuario,
+      isAdmin: !!user.is_admin,
+      permisos: getPermisosDeUsuario(user.id)
+    };
     next();
   } catch (error) {
     return res.status(401).json({ Message: "Sesión inválida o expirada." });
