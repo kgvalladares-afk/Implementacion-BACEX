@@ -4,6 +4,7 @@ import SalesOrder, { meta as salesorderMeta } from "./SalesOrder.jsx";
 import HabilitarDocumento, { meta as habDocMeta } from "./HabilitarDocumento.jsx";
 import EliminarContraRecibo, { meta as contrareciboMeta } from "./EliminarContraRecibo.jsx";
 import EliminarDocumento, { meta as elimDocMeta } from "./EliminarDocumento.jsx";
+import RedondeoDocumentos, { meta as redondeoMeta } from "./RedondeoDocumentos.jsx";
 
 export const label = "CFO / Finanzas";
 export const icon = "📊";
@@ -15,4 +16,5 @@ export const modules = {
   habDoc: { ...habDocMeta, Component: HabilitarDocumento },
   contrarecibo: { ...contrareciboMeta, Component: EliminarContraRecibo },
   elimDoc: { ...elimDocMeta, Component: EliminarDocumento },
+  redondeo: { ...redondeoMeta, Component: RedondeoDocumentos },
 };

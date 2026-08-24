@@ -15,6 +15,15 @@ function mensajeDeAzure(data) {
     return data.Message || null;
 }
 
+// Solo se puede redondear si el primer decimal (las "decenas de centavos") es 3 o menos.
+// Ej: 1,272,283.76 -> primer decimal 7 -> NO se puede redondear. 1,272,283.36 -> primer decimal 3 -> SI se puede.
+function puedeRedondear(monto) {
+    if (typeof monto !== 'number' || !isFinite(monto)) return false;
+    const centavos = Math.round(Math.abs(monto) * 100) % 100;
+    const primerDecimal = Math.floor(centavos / 10);
+    return primerDecimal <= 3;
+}
+
 app.post('/habilitarSalesOrder', requirePermission('cfo', 'salesorder'), async (req, res) => {
     try {
         const { ReferenciaOperativa, ModifiedBy } = req.body;
@@ -364,6 +373,241 @@ app.post('/eliminarDocumento', requirePermission('cfo', 'elimDoc'), async (req, 
 
     } catch (error) {
         console.error("Error en eliminarDocumento:", error);
+        return res.status(500).json({ Message: "Error interno del servidor", Error: error.message });
+    }
+});
+
+app.post('/contrarecibosPorCodigo', requirePermission('cfo', 'contrarecibo'), async (req, res) => {
+    try {
+        const { codigoInterno } = req.body;
+        if (!codigoInterno) {
+            return res.status(400).json({ Message: "El código interno es requerido." });
+        }
+
+        const pool = await conexion(BasesDeDatos.CfoNetCore);
+        const resultado = await pool.request()
+            .input('codigoInterno', sql.VarChar, codigoInterno)
+            .query(`
+                SELECT
+                    cr.Id,
+                    cr.ClienteId,
+                    c.Nombre AS Cliente,
+                    cr.CodigoInterno,
+                    cr.Observacion,
+                    cr.TotalMonto_Amount AS Monto,
+                    CASE WHEN cr.IsSoftDeleted = 1 THEN 'Eliminado' ELSE 'Activo' END AS Estado
+                FROM ContraRecibo cr
+                LEFT JOIN Cliente c ON cr.ClienteId = c.Id
+                WHERE cr.CodigoInterno = @codigoInterno
+            `);
+
+        return res.json(resultado.recordset);
+
+    } catch (error) {
+        console.error("Error en contrarecibosPorCodigo:", error);
+        return res.status(500).json({ Message: "Error al obtener contrarecibos", Error: error.message });
+    }
+});
+
+app.post('/eliminarContrarecibo', requirePermission('cfo', 'contrarecibo'), async (req, res) => {
+    try {
+        const { Id, ModifiedBy, Observacion } = req.body;
+
+        if (!Id) {
+            return res.status(400).json({ Message: "El contrarecibo es requerido." });
+        }
+        if (!ModifiedBy) {
+            return res.status(400).json({ Message: "El usuario que autoriza (ModifiedBy) es requerido." });
+        }
+        if (!Observacion || !Observacion.trim()) {
+            return res.status(400).json({ Message: "Debe indicar el motivo de la eliminación." });
+        }
+
+        // 1. Consultar el contrarecibo actual en la BD
+        const pool = await conexion(BasesDeDatos.CfoNetCore);
+        const validacion = await pool.request()
+            .input('id', sql.UniqueIdentifier, Id)
+            .query(`
+                SELECT [IsSoftDeleted]
+                FROM [dbo].[ContraRecibo]
+                WHERE [Id] = @id
+            `);
+
+        if (validacion.recordset.length === 0) {
+            return res.status(404).json({ Message: "No se encontró el contrarecibo." });
+        }
+        if (validacion.recordset[0].IsSoftDeleted) {
+            return res.status(400).json({ Message: "El contrarecibo ya fue eliminado." });
+        }
+
+        // 2. Si pasa la validación, consumir la API externa
+        const resp = await fetch("https://cfows.azurewebsites.net/api/Contrarecibo/Delete", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ Id, Observacion, ModifiedBy })
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.text();
+            console.error(`Contrarecibo/Delete → HTTP ${resp.status} para ${Id}:`, errData);
+            return res.status(resp.status).json({ Message: "Error al comunicarse con el servicio externo", Detail: errData });
+        }
+
+        const data = await resp.json().catch(() => null);
+        console.log(`Contrarecibo/Delete → ${Id}:`, JSON.stringify(data));
+
+        if (data?.IsValid === false) {
+            return res.status(400).json({ Message: mensajeDeAzure(data) || "Azure rechazó la solicitud." });
+        }
+
+        return res.status(200).json({ Message: "Contrarecibo eliminado con éxito", Data: data });
+
+    } catch (error) {
+        console.error("Error en eliminarContrarecibo:", error);
+        return res.status(500).json({ Message: "Error interno del servidor", Error: error.message });
+    }
+});
+
+app.post('/documentosParaRedondeo', requirePermission('cfo', 'redondeo'), async (req, res) => {
+    try {
+        const { sp, sps } = req.body;
+        const listaSps = Array.isArray(sps)
+            ? sps.map((s) => String(s).trim()).filter(Boolean)
+            : (sp ? [String(sp).trim()] : []);
+
+        if (listaSps.length === 0) {
+            return res.status(400).json({ Message: "El número de Solicitud de Pago (SP) es requerido." });
+        }
+
+        const pool = await conexion(BasesDeDatos.CfoNetCore);
+        const request = pool.request();
+        const parametros = listaSps.map((valor, i) => {
+            const nombre = `sp${i}`;
+            request.input(nombre, sql.VarChar, valor);
+            return `@${nombre}`;
+        });
+
+        const resultado = await request
+            .query(`
+                SELECT
+                    d.Id,
+                    pr.Nombre AS Proveedor,
+                    pr.PersonaId,
+                    c.Id AS Cliente_Id,
+                    c.Nombre AS Cliente,
+                    d.Discriminator AS Tipo_Documento,
+                    d.ReferenciaOperativa AS Referencia_Operativa,
+                    d.NumeroDocumentoFiscal AS Numero_DocumentoFiscal,
+                    d.TotalMonto AS Monto_Documento,
+                    d.DueñoDocumento_Value,
+                    d.ReembolsoStatus_Value,
+                    dd.PrecioVenta,
+                    dd.Impuesto,
+                    d.Moneda_Value,
+                    d.FlagTasaDeSeguridad,
+                    rc.NumeroDocumentoSap AS NumeroDocumento_Sap,
+                    sp.FechaPago AS Fecha_Solicitud_Pago,
+                    p.CreatedDate AS Fecha_Creacion_Pago,
+                    p.FechaDigitalizacion AS Fecha_oficial_Pago,
+                    sp.[Unique] AS Numero_SolicitudDePago,
+                    p.ReferenciaBancaria AS ReferenciaBancaria,
+                    p.[Unique] AS NumeroSolicitudDePago,
+                    p.RegistroSap AS Registro_Sap,
+                    MP.Descripcion AS MaterialProveedor,
+                    MP.Id AS MaterialProveedorId,
+                    MT.CodigoErpReembolso,
+                    MT.CuentaMayor,
+                    d.CreatedBy,
+                    d.CreatedDate,
+                    d.RegistroContableFacturaId,
+                    d.RegistroContableId,
+                    rc.MensajeSAp
+                FROM Documento d
+                LEFT JOIN SolicitudDePago AS sp ON (d.Id = sp.Id)
+                LEFT JOIN Pago p ON (sp.PagoId = p.Id)
+                LEFT JOIN Cliente c ON (d.ClienteId = c.Id)
+                LEFT JOIN Proveedor pr ON (d.ProveedorId = pr.Id)
+                LEFT JOIN RegistroContable rc ON (d.RegistroContableId = rc.Id)
+                OUTER APPLY (
+                    SELECT TOP 1 DD.PrecioVenta, DD.Impuesto, DD.MaterialProveedorId
+                    FROM dbo.DocumentoDetalle DD
+                    WHERE DD.DocumentoId = d.Id
+                    ORDER BY DD.PrecioVenta DESC
+                ) dd
+                LEFT JOIN dbo.MaterialProveedor MP ON MP.Id = dd.MaterialProveedorId
+                LEFT JOIN MaterialTenant MT ON MP.MaterialTenantId = MT.Id
+                WHERE sp.[Unique] IN (${parametros.join(", ")})
+                  AND d.IsSoftDeleted = 0
+                ORDER BY d.Id ASC
+            `);
+
+        return res.json(resultado.recordset);
+
+    } catch (error) {
+        console.error("Error en documentosParaRedondeo:", error);
+        return res.status(500).json({ Message: "Error al obtener documentos", Error: error.message });
+    }
+});
+
+app.post('/redondearDocumentos', requirePermission('cfo', 'redondeo'), async (req, res) => {
+    try {
+        const { Ids, ModifiedBy } = req.body;
+
+        if (!Array.isArray(Ids) || Ids.length === 0) {
+            return res.status(400).json({ Message: "Debe seleccionar al menos un documento para redondear." });
+        }
+        if (!ModifiedBy) {
+            return res.status(400).json({ Message: "El usuario que autoriza (ModifiedBy) es requerido." });
+        }
+
+        // Validar contra el monto real en base de datos que ningún documento exceda el límite de redondeo.
+        const pool = await conexion(BasesDeDatos.CfoNetCore);
+        const request = pool.request();
+        const parametros = Ids.map((id, i) => {
+            const nombre = `id${i}`;
+            request.input(nombre, sql.UniqueIdentifier, id);
+            return `@${nombre}`;
+        });
+        const validacion = await request.query(`
+            SELECT Id, TotalMonto
+            FROM Documento
+            WHERE Id IN (${parametros.join(", ")})
+        `);
+
+        const noRedondeables = validacion.recordset.filter((doc) => !puedeRedondear(doc.TotalMonto));
+        if (noRedondeables.length > 0) {
+            return res.status(400).json({
+                Message: `No se puede redondear: ${noRedondeables.length} documento(s) tienen un monto que excede el límite de 3 centavos permitido para redondeo.`
+            });
+        }
+
+        const resp = await fetch("https://cfows.azurewebsites.net/api/Documento/Redondeo", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ Ids, ModifiedBy })
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.text();
+            console.error(`Documento/Redondeo → HTTP ${resp.status}:`, errData);
+            return res.status(resp.status).json({ Message: "Error al comunicarse con el servicio externo", Detail: errData });
+        }
+
+        const data = await resp.json().catch(() => null);
+        console.log(`Documento/Redondeo → ${JSON.stringify(Ids)}:`, JSON.stringify(data));
+
+        if (data?.IsValid === false) {
+            return res.status(400).json({ Message: mensajeDeAzure(data) || "Azure rechazó la solicitud." });
+        }
+
+        return res.status(200).json({ Message: "Documentos redondeados con éxito", Data: data });
+
+    } catch (error) {
+        console.error("Error en redondearDocumentos:", error);
         return res.status(500).json({ Message: "Error interno del servidor", Error: error.message });
     }
 });

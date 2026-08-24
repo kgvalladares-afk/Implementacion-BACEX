@@ -37,7 +37,7 @@ export default function Login() {
   return (
     <div style={{
       minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-      background: "linear-gradient(160deg, #dce8f8 0%, #eef3fb 100%)", padding: "32px"
+      background: "linear-gradient(160deg, #f6e6e8 0%, #fbf1f2 100%)", padding: "32px"
     }}>
       <div style={{
         position: "relative", display: "flex", width: "100%", maxWidth: "1100px",
@@ -51,9 +51,9 @@ export default function Login() {
         >
           <defs>
             <linearGradient id="loginCurveGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#38bdf8" />
-              <stop offset="50%" stopColor="#8b5cf6" />
-              <stop offset="100%" stopColor="#ec4899" />
+              <stop offset="0%" stopColor="#6b1220" />
+              <stop offset="50%" stopColor="#c94f4f" />
+              <stop offset="100%" stopColor="#e8848a" />
             </linearGradient>
             <filter id="loginCurveGlow" x="-100%" y="-20%" width="300%" height="140%">
               <feGaussianBlur stdDeviation="6" result="blur" />
@@ -72,20 +72,20 @@ export default function Login() {
           />
         </svg>
 
-        {/* Panel de marca: la imagen ya trae logo, texto y módulos armados */}
+        {/* Panel de marca: el fondo de la imagen es transparente de verdad, así que el
+            degradado de Vesta se ve detrás sin alterar los colores originales del logo */}
         <div className="login-split-brand" style={{
           flex: "0 0 50%",
-          backgroundColor: "#f4f7fb",
-          backgroundImage: "url(/logo2.png)",
-          backgroundSize: "100%",
-          backgroundRepeat: "no-repeat",
-          backgroundPosition: "center"
+          backgroundImage: "url(/Logo-final.png), linear-gradient(150deg, #6b1220 0%, #b53347 50%, #e8848a 100%)",
+          backgroundSize: "95%, cover",
+          backgroundRepeat: "no-repeat, no-repeat",
+          backgroundPosition: "center, center"
         }} />
 
-        {/* Panel del formulario, con tinte azul */}
+        {/* Panel del formulario, con tinte rosado a juego con la marca */}
         <div style={{
           flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px",
-          background: "linear-gradient(160deg, #eaf1fb 0%, #dbe8f9 100%)"
+          background: "linear-gradient(160deg, #fbeaec 0%, #f6dde1 100%)"
         }}>
           <div style={{
             width: "100%", maxWidth: "380px",
@@ -94,7 +94,16 @@ export default function Login() {
             padding: "40px 36px"
           }}>
           <div style={{ display: "flex", justifyContent: "center", marginBottom: "18px" }}>
-            <img src="/vesta-logo.png" alt="Vesta" style={{ height: "120px", objectFit: "contain" }} />
+            <div style={{
+              width: "92px", height: "92px", borderRadius: "50%",
+              background: "linear-gradient(135deg, #6b1220, #c94f4f)",
+              display: "flex", alignItems: "center", justifyContent: "center"
+            }}>
+              <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </div>
           </div>
 
           <h2 style={{
@@ -143,7 +152,7 @@ export default function Login() {
               disabled={loading}
               style={{
                 width: "100%", marginTop: "8px", textTransform: "uppercase", letterSpacing: "0.04em",
-                background: "linear-gradient(135deg, #1e2a5e, #5b3fae)", border: "none"
+                background: "linear-gradient(135deg, #6b1220, #c94f4f)", border: "none"
               }}
             >
               {loading ? "Ingresando..." : "Iniciar sesión"}
