@@ -94,6 +94,15 @@ export default function JsonSolicitud({ solicitudes = [], tipoSolicitudId, onCha
         )}
       </div>
 
+      {loading && (
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "14px", background: "#f8f9fa", border: "1px solid #e3e8ee", borderRadius: "8px", marginBottom: "14px" }}>
+          <span className="spinner-ring" />
+          <span style={{ fontSize: "13px", color: "#4f5b66" }}>
+            Consultando el servicio externo... esto puede tardar <strong>hasta 10-15 segundos</strong>.
+          </span>
+        </div>
+      )}
+
       {resultado !== null && (
         <div style={{ position: "relative" }}>
           <button

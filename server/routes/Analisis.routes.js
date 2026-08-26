@@ -154,4 +154,77 @@ app.post('/evaluarAnalisis', requirePermission('red', 'matriz'), async (req, res
     }
 });
 
+app.post('/actualizarHaSidoEvaluado', requirePermission('red', 'matriz'), async (req, res) => {
+    try {
+        const { referenciaOperativaId, haSidoEvaluado, usuarioId } = req.body;
+        if (!referenciaOperativaId) {
+            return res.status(400).json({ Message: "La Referencia Operativa (ReferenciaOperativaId) es requerida." });
+        }
+        if (!usuarioId) {
+            return res.status(400).json({ Message: "El usuario que autoriza (UsuarioId) es requerido." });
+        }
+        if (typeof haSidoEvaluado !== "boolean") {
+            return res.status(400).json({ Message: "Debe indicar el valor de HaSidoEvaluado (Sí/No)." });
+        }
+
+        const resp = await fetch("https://analisisderedapi.vesta-accelerate.com/api/ReferenciaOperativaCrudApi/ActualizarHaSidoEvaluado", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ ReferenciaOperativaId: referenciaOperativaId, HaSidoEvaluado: haSidoEvaluado, UsuarioId: usuarioId })
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.text();
+            console.error(`ReferenciaOperativaCrudApi/ActualizarHaSidoEvaluado → HTTP ${resp.status}:`, errData);
+            return res.status(resp.status).json({ Message: "Error al comunicarse con el servicio externo", Detail: errData });
+        }
+
+        const data = await resp.json().catch(() => null);
+        console.log(`ReferenciaOperativaCrudApi/ActualizarHaSidoEvaluado → ${referenciaOperativaId}:`, JSON.stringify(data));
+
+        if (data?.IsValid === false) {
+            const mensaje = Array.isArray(data.Message) ? data.Message.join(' ') : data.Message;
+            return res.status(400).json({ Message: mensaje || "El servicio rechazó la solicitud." });
+        }
+
+        return res.status(200).json({ Message: "Referencia Operativa actualizada con éxito", Data: data });
+
+    } catch (error) {
+        console.error("Error en actualizarHaSidoEvaluado:", error);
+        return res.status(500).json({ Message: "Error interno del servidor", Error: error.message });
+    }
+});
+
+app.post('/evaluarReferenciaOperativa', requirePermission('red', 'matriz'), async (req, res) => {
+    try {
+        const { referencia } = req.body;
+        if (!referencia) {
+            return res.status(400).json({ Message: "La Referencia es requerida." });
+        }
+
+        const resp = await fetch("https://analisisderedapi.vesta-accelerate.com/api/AnalisisCriterioTestApi/EvaluarReferenciaOperativaByReferencia", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ Referencia: referencia })
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.text();
+            console.error(`AnalisisCriterioTestApi/EvaluarReferenciaOperativaByReferencia → HTTP ${resp.status}:`, errData);
+            return res.status(resp.status).json({ Message: "Error al comunicarse con el servicio externo", Detail: errData });
+        }
+
+        const data = await resp.json().catch(() => null);
+        return res.status(200).json({ Data: data });
+
+    } catch (error) {
+        console.error("Error en evaluarReferenciaOperativa:", error);
+        return res.status(500).json({ Message: "Error interno del servidor", Error: error.message });
+    }
+});
+
 export default app;

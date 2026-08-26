@@ -27,7 +27,7 @@ function GenericTable({ rows, ocultar = [] }) {
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={row.Id || row.ReferenciaOperativaId || row.AnalisisId || i}>
+            <tr key={row.AnalisisId || row.ReferenciaOperativaId || row.Id || i}>
               {columnas.map((c) => (
                 <td key={c}>{formatValue(c, row[c])}</td>
               ))}

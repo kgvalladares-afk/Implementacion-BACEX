@@ -666,6 +666,17 @@ body {
   }
 }
 
+.spinner-ring {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: 3px solid #dbe3fb;
+  border-top-color: var(--vesta-rose, #2c4a6e);
+  border-radius: 50%;
+  animation: btn-spin 0.7s linear infinite;
+}
+
 /* --- Estado Deshabilitado --- */
 .btn:disabled,
 .btn-primary:disabled,
@@ -815,8 +826,16 @@ body {
 
 .doc-table .sticky-col {
   position: sticky;
-  background: inherit;
+  background: #fff;
   z-index: 1;
+}
+
+.doc-table tbody tr:nth-child(even) .sticky-col {
+  background: #fafbfc;
+}
+
+.doc-table tbody tr:hover .sticky-col {
+  background: #f4f6fb;
 }
 
 .doc-table thead .sticky-col {
