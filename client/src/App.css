@@ -306,6 +306,63 @@ body {
   font-size: 13px;
 }
 
+/* GRID DE CUADROS (varias herramientas visibles a la vez en un mismo módulo) */
+
+.cuadro-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(560px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.cuadro-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cuadro-box {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+}
+
+.cuadro-box-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f1f2f4;
+}
+
+.cuadro-box-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--vesta-gold-dark) 0%, var(--vesta-gold) 100%);
+  color: white;
+}
+
+.cuadro-box-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.cuadro-box-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
 /* CARDS */
 
 .home-grid {
@@ -527,6 +584,19 @@ body {
 .btn-success:hover,
 .btn.success:hover {
   background: var(--success-hover);
+}
+
+/* Suave / Actualizar (Azul delicado, para acciones de guardado no destructivas) */
+.btn-soft,
+.btn.soft {
+  background: #6f9bc2;
+  color: white;
+  border-color: transparent;
+}
+
+.btn-soft:hover,
+.btn.soft:hover {
+  background: #5b8fb9;
 }
 
 /* Peligro / Eliminar (Rojo suave/Alerta) */

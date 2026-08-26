@@ -612,4 +612,136 @@ app.post('/redondearDocumentos', requirePermission('cfo', 'redondeo'), async (re
     }
 });
 
+app.post('/aduanaPorReferencia', requirePermission('cfo', 'cambio'), async (req, res) => {
+    try {
+        const { referencia } = req.body;
+        if (!referencia) {
+            return res.status(400).json({ Message: "La referencia operativa es requerida." });
+        }
+
+        const pool = await conexion(BasesDeDatos.CfoNetCore);
+        const resultado = await pool.request()
+            .input('referencia', sql.VarChar, referencia)
+            .query(`
+                SELECT
+                    SO.ReferenciaOperativa,
+                    SO.CentroSuministrador,
+                    S.Nombre,
+                    SO.Status_Value,
+                    CASE
+                        WHEN SO.Status_Value = 3 THEN 'Facturado'
+                        WHEN SO.Status_Value = 2 THEN 'Entregada de Documentos'
+                        WHEN SO.Status_Value = 1 THEN 'Creado'
+                        ELSE 'Estado Desconocido'
+                    END AS Status_DisplayName,
+                    SO.Digitalizado,
+                    SO.IsSoftDeleted
+                FROM dbo.SalesOrder SO
+                LEFT JOIN dbo.Sitio S ON S.OficinaVenta = SO.OficinaVenta
+                WHERE SO.ReferenciaOperativa = @referencia
+            `);
+
+        return res.json(resultado.recordset);
+
+    } catch (error) {
+        console.error("Error en aduanaPorReferencia:", error);
+        return res.status(500).json({ Message: "Error al obtener datos de aduana", Error: error.message });
+    }
+});
+
+app.post('/componentePorReferencias', requirePermission('cfo', 'cambio'), async (req, res) => {
+    try {
+        const { referencias } = req.body;
+        const lista = Array.isArray(referencias)
+            ? referencias.map((r) => String(r).trim()).filter(Boolean)
+            : [];
+
+        if (lista.length === 0) {
+            return res.status(400).json({ Message: "Debe indicar al menos una Referencia Operativa." });
+        }
+
+        const pool = await conexion(BasesDeDatos.CfoNetCore);
+        const request = pool.request();
+        const parametros = lista.map((valor, i) => {
+            const nombre = `ref${i}`;
+            request.input(nombre, sql.VarChar, valor);
+            return `@${nombre}`;
+        });
+
+        const resultado = await request.query(`
+            SELECT
+                SO.ReferenciaOperativa,
+                SD.id AS SalesOrderDetalleId,
+                C.ID AS Componente_ID,
+                C.Descripcion,
+                SO.CentroSuministrador,
+                SO.OficinaVenta,
+                SO.IsSoftDeleted
+            FROM [dbo].[SalesOrderDetalle] SD
+            LEFT JOIN [dbo].[SalesOrder] SO ON SO.id = SD.salesOrderId
+            LEFT JOIN [dbo].[Componente] C ON C.ID = SD.ComponenteID
+            WHERE SO.ReferenciaOperativa IN (${parametros.join(", ")})
+              AND SO.IsSoftDeleted = 0
+        `);
+
+        return res.json(resultado.recordset);
+
+    } catch (error) {
+        console.error("Error en componentePorReferencias:", error);
+        return res.status(500).json({ Message: "Error al obtener componentes", Error: error.message });
+    }
+});
+
+app.post('/actualizarComponente', requirePermission('cfo', 'cambio'), async (req, res) => {
+    try {
+        const { SalesOrderDetalleId, ComponenteId, OficinaVenta, CentroSuministrador, ModifiedBy, Observacion } = req.body;
+
+        if (!SalesOrderDetalleId) {
+            return res.status(400).json({ Message: "El detalle del Sales Order (SalesOrderDetalleId) es requerido." });
+        }
+        if (!ComponenteId) {
+            return res.status(400).json({ Message: "Debe seleccionar el nuevo componente." });
+        }
+        if (!ModifiedBy) {
+            return res.status(400).json({ Message: "El usuario que autoriza (ModifiedBy) es requerido." });
+        }
+        if (!Observacion || !Observacion.trim()) {
+            return res.status(400).json({ Message: "Debe indicar el motivo del cambio." });
+        }
+
+        const resp = await fetch("https://cfows.azurewebsites.net/api/SalesOrder/UpdateComponenteList", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                ModifiedBy,
+                Observacion: Observacion.trim(),
+                List: [
+                    { SalesOrderDetalleId, ComponenteId, OficinaVenta, CentroSuministrador }
+                ]
+            })
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.text();
+            console.error(`SalesOrder/UpdateComponenteList → HTTP ${resp.status}:`, errData);
+            return res.status(resp.status).json({ Message: "Error al comunicarse con el servicio externo", Detail: errData });
+        }
+
+        const data = await resp.json().catch(() => null);
+        console.log(`SalesOrder/UpdateComponenteList → ${SalesOrderDetalleId}:`, JSON.stringify(data));
+
+        if (data?.IsValid === false) {
+            return res.status(400).json({ Message: mensajeDeAzure(data) || "Azure rechazó la solicitud." });
+        }
+
+        return res.status(200).json({ Message: "Componente actualizado con éxito", Data: data });
+
+    } catch (error) {
+        console.error("Error en actualizarComponente:", error);
+        return res.status(500).json({ Message: "Error interno del servidor", Error: error.message });
+    }
+});
+
 export default app;
