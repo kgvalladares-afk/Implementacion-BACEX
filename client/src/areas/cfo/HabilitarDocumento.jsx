@@ -65,8 +65,9 @@ export default function HabilitarDocumento() {
   }, [documentos]);
 
   const handleBuscar = async () => {
-    if (!referencia.trim()) {
-      showToast("Ingrese una Referencia Operativa para buscar", "warn");
+    const referencias = referencia.split(/[,\s\n]+/).map((r) => r.trim()).filter(Boolean);
+    if (referencias.length === 0) {
+      showToast("Ingrese al menos una Referencia Operativa para buscar", "warn");
       return;
     }
     setLoading(true);
@@ -74,7 +75,7 @@ export default function HabilitarDocumento() {
       const response = await apiFetch(`/documentosPorReferencia`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ referencia: referencia.trim() })
+        body: JSON.stringify({ referencias })
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
@@ -165,7 +166,7 @@ export default function HabilitarDocumento() {
             <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#a3acb9", fontSize: "16px" }}>🔍</span>
             <input
               type="text"
-              placeholder="Ingrese la Referencia Operativa..."
+              placeholder="Ingrese una o varias Referencias Operativas..."
               value={referencia}
               onChange={(e) => setReferencia(e.target.value)}
               style={{ width: "100%", padding: "10px 12px 10px 38px", border: "1px solid #dcdfe6", borderRadius: "6px", fontSize: "14px" }}

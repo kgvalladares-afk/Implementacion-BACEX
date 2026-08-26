@@ -46,8 +46,8 @@ app.post('/hojaRutaEjemplo', requirePermission('cfo', 'cambio'), async (req, res
 
         const pool = await conexion(BasesDeDatos.HojaDeRuta);
         const resultado = await pool.request()
-            .input('clienteId', sql.UniqueIdentifier, clienteId)
-            .input('aduanaId', sql.UniqueIdentifier, aduanaId)
+            .input('clienteId', sql.VarChar, clienteId)
+            .input('aduanaId', sql.VarChar, aduanaId)
             .input('gestionPrefix', sql.VarChar, `${gestionPrefix}%`)
             .input('excluir', sql.VarChar, excluirNumeroHojaRuta || '')
             .query(`

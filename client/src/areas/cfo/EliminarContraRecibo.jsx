@@ -39,8 +39,9 @@ export default function EliminarContraRecibo() {
   const showToast = useToast();
 
   const handleBuscar = async () => {
-    if (!codigoInterno.trim()) {
-      showToast("Ingrese un Código Interno para buscar", "warn");
+    const codigosInternos = codigoInterno.split(/[,\s\n]+/).map((c) => c.trim()).filter(Boolean);
+    if (codigosInternos.length === 0) {
+      showToast("Ingrese al menos un Código Interno para buscar", "warn");
       return;
     }
     setLoading(true);
@@ -48,7 +49,7 @@ export default function EliminarContraRecibo() {
       const response = await apiFetch(`/contrarecibosPorCodigo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ codigoInterno: codigoInterno.trim() })
+        body: JSON.stringify({ codigosInternos })
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
@@ -140,7 +141,7 @@ export default function EliminarContraRecibo() {
             <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#a3acb9", fontSize: "16px" }}>🔍</span>
             <input
               type="text"
-              placeholder="Ingrese el Código Interno (ej: SV2608-0021)..."
+              placeholder="Ingrese uno o varios Códigos Internos (ej: SV2608-0021)..."
               value={codigoInterno}
               onChange={(e) => setCodigoInterno(e.target.value)}
               style={{ width: "100%", padding: "10px 12px 10px 38px", border: "1px solid #dcdfe6", borderRadius: "6px", fontSize: "14px" }}

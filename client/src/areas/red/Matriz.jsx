@@ -1,88 +1,146 @@
 import { useState } from "react";
 import { useToast } from "../../components/Toast.jsx";
+import { apiFetch } from "../../apiClient.js";
+import SolicitudesAsociadas, { meta as solicitudesMeta } from "./matriz/SolicitudesAsociadas.jsx";
+import JsonSolicitud, { meta as jsonSolicitudMeta } from "./matriz/JsonSolicitud.jsx";
+import EvaluarMatriz, { meta as evaluarMatrizMeta } from "./matriz/EvaluarMatriz.jsx";
 
 export const meta = {
   label: "Matriz de Acción",
   icon: "🧮",
-  desc: "Visualizar y gestionar solicitudes de la matriz",
+  desc: "Herramientas de gestión sobre la matriz de acción",
   kind: "primary",
 };
 
 export default function Matriz() {
-  const [matrizFiltro, setMatrizFiltro] = useState("");
-  const [matrizDatos, setMatrizDatos] = useState([]);
+  const [gestion, setGestion] = useState("");
   const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [referenciasOperativas, setReferenciasOperativas] = useState([]);
+  const [solicitudes, setSolicitudes] = useState([]);
+  const [tipoSolicitudId, setTipoSolicitudId] = useState("");
   const showToast = useToast();
 
-  const handleCargarMatriz = () => {
-    if (!matrizFiltro.trim()) {
-      showToast("Ingrese un nodo o ID de ruta", "warn");
+  const fetchSolicitudes = async (valorGestion, { resetSeleccion = true } = {}) => {
+    try {
+      const response = await apiFetch(`/solicitudesAsociadas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gestion: valorGestion })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        showToast(data?.Message || `Error ${response.status} al buscar`, "warn");
+        setReferenciasOperativas([]);
+        setSolicitudes([]);
+        setSearched(true);
+        return;
+      }
+      setReferenciasOperativas(Array.isArray(data?.referenciasOperativas) ? data.referenciasOperativas : []);
+      setSolicitudes(Array.isArray(data?.solicitudes) ? data.solicitudes : []);
+      if (resetSeleccion) setTipoSolicitudId("");
+      setSearched(true);
+    } catch (error) {
+      showToast("⚠️ Error de conexión con el servidor", "warn");
+      setReferenciasOperativas([]);
+      setSolicitudes([]);
+      setSearched(true);
+    }
+  };
+
+  const handleBuscar = async () => {
+    if (!gestion.trim()) {
+      showToast("Ingrese una Gestión para buscar", "warn");
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      setMatrizDatos([
-        { id: "M-01", nodoOrigen: "Nodo Central TG", nodoDestino: "Sucursal SPS Oaste", latencia: "14ms", redundancia: "Alta", capacidad: "1 Gbps", estado: "Estable" },
-        { id: "M-02", nodoOrigen: "Nodo Central TG", nodoDestino: "Enlace Ceiba Norte", latencia: "28ms", redundancia: "Media", capacidad: "500 Mbps", estado: "Estable" },
-        { id: "M-03", nodoOrigen: "Planta Siguatepeque", nodoDestino: "Nodo Central TG", latencia: "45ms", redundancia: "Baja", capacidad: "200 Mbps", estado: "Degradado" }
-      ]);
-      showToast("Matriz de conectividad cargada", "ok");
+    try {
+      await fetchSolicitudes(gestion.trim());
+    } finally {
       setLoading(false);
-    }, 600);
+    }
   };
 
-  return (
-    <div className="form-wrap" style={{ position: "relative", zIndex: 1, maxWidth: "900px" }}>
-      <div className="form-title" style={{ fontSize: "22px", fontWeight: "700", color: "#1a1f36" }}>{meta.label}</div>
-      <div className="form-sub" style={{ color: "#697386", marginBottom: "20px" }}>{meta.desc}</div>
+  // Después de reiniciar/reevaluar una solicitud en "Evaluar Matriz", se refresca
+  // "Solicitudes Asociadas" con los mismos filtros para reflejar el nuevo estado,
+  // sin perder la selección de Tipo de Solicitud que se estaba evaluando.
+  const handleSolicitudEvaluada = async () => {
+    if (!gestion.trim()) return;
+    await fetchSolicitudes(gestion.trim(), { resetSeleccion: false });
+  };
 
-      <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+  const handleClear = () => {
+    setGestion("");
+    setReferenciasOperativas([]);
+    setSolicitudes([]);
+    setTipoSolicitudId("");
+    setSearched(false);
+  };
+
+  const renderCuadro = (c) => (
+    <div className="cuadro-box" style={c.full ? { gridColumn: "1 / -1" } : undefined} key={c.key}>
+      <div className="cuadro-box-header">
+        <div className="cuadro-box-icon">{c.icon}</div>
+        <div>
+          <div className="cuadro-box-title">{c.label}</div>
+          <div className="cuadro-box-desc">{c.desc}</div>
+        </div>
+      </div>
+      <c.Component loading={loading} searched={searched} {...c.extraProps} />
+    </div>
+  );
+
+  return (
+    <div style={{ position: "relative", zIndex: 1 }}>
+      <div style={{ borderBottom: "1px solid #eaeaea", paddingBottom: "10px", marginBottom: "14px" }}>
+        <div className="form-title" style={{ fontSize: "19px", fontWeight: "700", color: "#1a1f36" }}>{meta.label}</div>
+        <div className="form-sub" style={{ color: "#697386", marginTop: "2px", fontSize: "12px" }}>{meta.desc}</div>
+      </div>
+
+      <div style={{ display: "inline-flex", alignItems: "center", gap: "10px", background: "#f8f9fa", padding: "8px 10px", borderRadius: "8px", border: "1px solid #e3e8ee", marginBottom: "16px" }}>
+        <span style={{ fontSize: "12px", fontWeight: "600", color: "#4f5b66", whiteSpace: "nowrap", paddingLeft: "4px" }}>
+          🔍 Gestión / Hoja de Ruta
+        </span>
         <input
           type="text"
-          placeholder="Ingrese Nodo Origen, Destino o ID..."
-          value={matrizFiltro}
-          onChange={(e) => setMatrizFiltro(e.target.value)}
-          style={{ flex: 1, padding: "10px", borderRadius: "6px", border: "1px solid #dcdfe6" }}
+          placeholder="Ej: UH-UH-H26-126"
+          title="Puede ingresar el número de Gestión o de Hoja de Ruta / Referencia Operativa"
+          value={gestion}
+          onChange={(e) => setGestion(e.target.value)}
+          style={{ width: "220px", padding: "7px 10px", border: "1px solid #dcdfe6", borderRadius: "6px", fontSize: "13px" }}
+          disabled={loading}
         />
-        <button className="btn primary" onClick={handleCargarMatriz} disabled={loading}>
-          {loading ? "Cargando..." : "Consultar Matriz"}
+        <button className="btn primary" onClick={handleBuscar} disabled={loading} style={{ padding: "6px 16px", fontSize: "13px" }}>
+          {loading ? "Buscando..." : "Buscar"}
+        </button>
+        <button className="btn ghost" onClick={handleClear} disabled={loading} style={{ padding: "6px 16px", fontSize: "13px" }}>
+          Limpiar
         </button>
       </div>
 
-      {matrizDatos.length > 0 && (
-        <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", border: "1px solid #e3e8ee" }}>
-          <thead>
-            <tr style={{ background: "#f8f9fa", borderBottom: "1px solid #e3e8ee", textAlign: "left", fontSize: "12px" }}>
-              <th style={{ padding: "10px" }}>ID</th>
-              <th style={{ padding: "10px" }}>Origen</th>
-              <th style={{ padding: "10px" }}>Destino</th>
-              <th style={{ padding: "10px" }}>Latencia</th>
-              <th style={{ padding: "10px" }}>Capacidad</th>
-              <th style={{ padding: "10px" }}>Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {matrizDatos.map((item) => (
-              <tr key={item.id} style={{ borderBottom: "1px solid #edf2f7", fontSize: "13px" }}>
-                <td style={{ padding: "10px", fontWeight: "bold" }}>{item.id}</td>
-                <td style={{ padding: "10px" }}>{item.nodoOrigen}</td>
-                <td style={{ padding: "10px" }}>{item.nodoDestino}</td>
-                <td style={{ padding: "10px" }}>{item.latencia}</td>
-                <td style={{ padding: "10px" }}>{item.capacidad}</td>
-                <td style={{ padding: "10px" }}>
-                  <span style={{
-                    padding: "2px 6px", borderRadius: "4px", fontSize: "11px",
-                    background: item.estado === "Estable" ? "#d1fae5" : "#fef3c7",
-                    color: item.estado === "Estable" ? "#065f46" : "#92400e"
-                  }}>
-                    {item.estado}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <div className="cuadro-grid">
+        {renderCuadro({
+          key: "solicitudesAsociadas",
+          ...solicitudesMeta,
+          Component: SolicitudesAsociadas,
+          full: true,
+          extraProps: { referenciasOperativas, solicitudes },
+        })}
+        {renderCuadro({
+          key: "jsonSolicitud",
+          ...jsonSolicitudMeta,
+          Component: JsonSolicitud,
+          full: true,
+          extraProps: { solicitudes, tipoSolicitudId, onChangeTipoSolicitud: setTipoSolicitudId },
+        })}
+        {renderCuadro({
+          key: "evaluarMatriz",
+          ...evaluarMatrizMeta,
+          Component: EvaluarMatriz,
+          full: true,
+          extraProps: { solicitudes, tipoSolicitudId, onEvaluado: handleSolicitudEvaluada },
+        })}
+      </div>
     </div>
   );
 }

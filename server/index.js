@@ -4,6 +4,7 @@ const app = express()
 const port = 3000
 import cfoRoutes from './routes/Cfo.routes.js'
 import hrRoutes from './routes/Hr.routes.js'
+import analisisRoutes from './routes/Analisis.routes.js'
 import authRoutes from './routes/Auth.routes.js'
 import 'dotenv/config'
 
@@ -24,6 +25,7 @@ app.use(cors({
 app.use('/api/auth', authRoutes);
 app.use('/api', cfoRoutes);
 app.use('/api', hrRoutes);
+app.use('/api', analisisRoutes);
 
 app.listen(port, () => {
     console.log(`servidor corriendo ${port}`)

@@ -121,14 +121,24 @@ app.post('/getCliente', requirePermission('cfo', 'salesorder'), async (req, res)
 
 app.post('/documentosPorReferencia', requirePermission('cfo', 'habDoc'), async (req, res) => {
     try {
-        const { referencia } = req.body;
-        if (!referencia) {
+        const { referencia, referencias } = req.body;
+        const listaReferencias = Array.isArray(referencias)
+            ? referencias.map((r) => String(r).trim()).filter(Boolean)
+            : (referencia ? [String(referencia).trim()] : []);
+
+        if (listaReferencias.length === 0) {
             return res.status(400).json({ Message: "La referencia operativa es requerida." });
         }
 
         const pool = await conexion(BasesDeDatos.CfoNetCore);
-        const resultado = await pool.request()
-            .input('referencia', sql.VarChar, referencia)
+        const request = pool.request();
+        const parametros = listaReferencias.map((valor, i) => {
+            const nombre = `ref${i}`;
+            request.input(nombre, sql.VarChar, valor);
+            return `@${nombre}`;
+        });
+
+        const resultado = await request
             .query(`
                 SELECT
                     d.Id AS DocumentoId,
@@ -160,9 +170,9 @@ app.post('/documentosPorReferencia', requirePermission('cfo', 'habDoc'), async (
                     WHERE DD2.DocumentoId = d.Id
                     ORDER BY MP2.Descripcion ASC
                 ) MP
-                WHERE d.ReferenciaOperativa = @referencia
+                WHERE d.ReferenciaOperativa IN (${parametros.join(", ")})
                   AND d.IsSoftDeleted = 0
-                ORDER BY MP.Descripcion ASC
+                ORDER BY d.ReferenciaOperativa ASC, MP.Descripcion ASC
             `);
 
         return res.json(resultado.recordset);
@@ -252,14 +262,24 @@ app.post('/habilitarDocumento', requirePermission('cfo', 'habDoc'), async (req, 
 
 app.post('/documentosParaEliminar', requirePermission('cfo', 'elimDoc'), async (req, res) => {
     try {
-        const { referencia } = req.body;
-        if (!referencia) {
+        const { referencia, referencias } = req.body;
+        const listaReferencias = Array.isArray(referencias)
+            ? referencias.map((r) => String(r).trim()).filter(Boolean)
+            : (referencia ? [String(referencia).trim()] : []);
+
+        if (listaReferencias.length === 0) {
             return res.status(400).json({ Message: "La referencia operativa es requerida." });
         }
 
         const pool = await conexion(BasesDeDatos.CfoNetCore);
-        const resultado = await pool.request()
-            .input('referencia', sql.VarChar, referencia)
+        const request = pool.request();
+        const parametros = listaReferencias.map((valor, i) => {
+            const nombre = `ref${i}`;
+            request.input(nombre, sql.VarChar, valor);
+            return `@${nombre}`;
+        });
+
+        const resultado = await request
             .query(`
                 SELECT
                     d.Id AS Documento_ID,
@@ -294,9 +314,9 @@ app.post('/documentosParaEliminar', requirePermission('cfo', 'elimDoc'), async (
                     ORDER BY MP2.Descripcion ASC
                 ) MP
                 LEFT JOIN MaterialTenant MT ON MP.MaterialTenantId = MT.Id
-                WHERE d.ReferenciaOperativa = @referencia
+                WHERE d.ReferenciaOperativa IN (${parametros.join(", ")})
                   AND d.IsSoftDeleted = '0'
-                ORDER BY MP.Descripcion ASC
+                ORDER BY d.ReferenciaOperativa ASC, MP.Descripcion ASC
             `);
 
         return res.json(resultado.recordset);
@@ -379,14 +399,24 @@ app.post('/eliminarDocumento', requirePermission('cfo', 'elimDoc'), async (req, 
 
 app.post('/contrarecibosPorCodigo', requirePermission('cfo', 'contrarecibo'), async (req, res) => {
     try {
-        const { codigoInterno } = req.body;
-        if (!codigoInterno) {
+        const { codigoInterno, codigosInternos } = req.body;
+        const listaCodigos = Array.isArray(codigosInternos)
+            ? codigosInternos.map((c) => String(c).trim()).filter(Boolean)
+            : (codigoInterno ? [String(codigoInterno).trim()] : []);
+
+        if (listaCodigos.length === 0) {
             return res.status(400).json({ Message: "El código interno es requerido." });
         }
 
         const pool = await conexion(BasesDeDatos.CfoNetCore);
-        const resultado = await pool.request()
-            .input('codigoInterno', sql.VarChar, codigoInterno)
+        const request = pool.request();
+        const parametros = listaCodigos.map((valor, i) => {
+            const nombre = `codigo${i}`;
+            request.input(nombre, sql.VarChar, valor);
+            return `@${nombre}`;
+        });
+
+        const resultado = await request
             .query(`
                 SELECT
                     cr.Id,
@@ -398,7 +428,7 @@ app.post('/contrarecibosPorCodigo', requirePermission('cfo', 'contrarecibo'), as
                     CASE WHEN cr.IsSoftDeleted = 1 THEN 'Eliminado' ELSE 'Activo' END AS Estado
                 FROM ContraRecibo cr
                 LEFT JOIN Cliente c ON cr.ClienteId = c.Id
-                WHERE cr.CodigoInterno = @codigoInterno
+                WHERE cr.CodigoInterno IN (${parametros.join(", ")})
             `);
 
         return res.json(resultado.recordset);
