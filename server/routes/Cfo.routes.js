@@ -15,13 +15,9 @@ function mensajeDeAzure(data) {
     return data.Message || null;
 }
 
-// Solo se puede redondear si el primer decimal (las "decenas de centavos") es 3 o menos.
-// Ej: 1,272,283.76 -> primer decimal 7 -> NO se puede redondear. 1,272,283.36 -> primer decimal 3 -> SI se puede.
+// Único requisito para poder redondear: que el documento tenga un monto numérico válido.
 function puedeRedondear(monto) {
-    if (typeof monto !== 'number' || !isFinite(monto)) return false;
-    const centavos = Math.round(Math.abs(monto) * 100) % 100;
-    const primerDecimal = Math.floor(centavos / 10);
-    return primerDecimal <= 3;
+    return typeof monto === 'number' && isFinite(monto);
 }
 
 app.post('/habilitarSalesOrder', requirePermission('cfo', 'salesorder'), async (req, res) => {
@@ -683,7 +679,7 @@ app.post('/redondearDocumentos', requirePermission('cfo', 'redondeo'), async (re
         const noRedondeables = validacion.recordset.filter((doc) => !puedeRedondear(doc.TotalMonto));
         if (noRedondeables.length > 0) {
             return res.status(400).json({
-                Message: `No se puede redondear: ${noRedondeables.length} documento(s) tienen un monto que excede el límite de 3 centavos permitido para redondeo.`
+                Message: `No se puede redondear: ${noRedondeables.length} documento(s) no tienen un monto válido.`
             });
         }
 

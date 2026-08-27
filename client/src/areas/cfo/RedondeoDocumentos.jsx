@@ -12,17 +12,13 @@ export const meta = {
 
 const currencyFmt = new Intl.NumberFormat("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// Solo se puede redondear si el primer decimal (las "decenas de centavos") es 3 o menos.
-// Ej: 1,272,283.76 -> primer decimal 7 -> NO se puede redondear. 1,272,283.36 -> primer decimal 3 -> SI se puede.
+// Única función que decide si un documento se puede redondear. Devuelve null si sí se
+// puede, o el motivo por el que no: "sinMonto" (no trae un monto numérico válido) o
+// "yaEntero" (el monto ya es una cifra entera, sin centavos que redondear).
 function puedeRedondear(monto) {
-  if (typeof monto !== "number" || !isFinite(monto)) return false;
-  const centavos = Math.round(Math.abs(monto) * 100) % 100;
-  const primerDecimal = Math.floor(centavos / 10);
-  return primerDecimal <= 3;
-}
-
-function tieneMonto(monto) {
-  return typeof monto === "number" && isFinite(monto);
+  if (typeof monto !== "number" || !isFinite(monto)) return "sinMonto";
+  if (Math.round(monto * 100) % 100 === 0) return "yaEntero";
+  return null;
 }
 
 export default function RedondeoDocumentos() {
@@ -88,7 +84,7 @@ export default function RedondeoDocumentos() {
   };
 
   const redondeablesIds = documentos
-    .filter((d) => puedeRedondear(d.Monto_Documento) && !redondeadosIds.has(d.Id))
+    .filter((d) => puedeRedondear(d.Monto_Documento) === null && !redondeadosIds.has(d.Id))
     .map((d) => d.Id);
 
   const handleToggleTodos = () => {
@@ -127,7 +123,7 @@ export default function RedondeoDocumentos() {
       showToast(data?.Message || "✓ Documentos redondeados con éxito", "ok");
       const idsRedondeados = new Set(seleccionados);
       setDocumentos((prev) => prev.map((d) =>
-        idsRedondeados.has(d.Id) ? { ...d, Monto_Documento: Math.floor(d.Monto_Documento) } : d
+        idsRedondeados.has(d.Id) ? { ...d, Monto_Documento: Math.round(d.Monto_Documento) } : d
       ));
       setRedondeadosIds((prev) => new Set([...prev, ...idsRedondeados]));
       setSeleccionados(new Set());
@@ -235,11 +231,9 @@ export default function RedondeoDocumentos() {
               <tbody>
                 {documentos.map((doc) => {
                   const yaRedondeado = redondeadosIds.has(doc.Id);
-                  const montoValido = tieneMonto(doc.Monto_Documento);
-                  const redondeable = puedeRedondear(doc.Monto_Documento);
-                  const colorMonto = yaRedondeado || (montoValido && redondeable)
-                    ? "#334155"
-                    : !montoValido ? "#697386" : "#b91c1c";
+                  const motivo = puedeRedondear(doc.Monto_Documento);
+                  const redondeable = motivo === null;
+                  const colorMonto = yaRedondeado || redondeable ? "#334155" : "#697386";
                   return (
                     <tr key={doc.Id}>
                       <td>
@@ -248,7 +242,7 @@ export default function RedondeoDocumentos() {
                           checked={seleccionados.has(doc.Id)}
                           onChange={() => handleToggleSeleccion(doc.Id)}
                           disabled={!redondeable || yaRedondeado}
-                          title={!montoValido ? "No aplica a redondeo" : !redondeable ? "Este documento excede el límite de 3 centavos permitido para redondeo" : undefined}
+                          title={motivo === "sinMonto" ? "No aplica a redondeo" : motivo === "yaEntero" ? "Documento ya fue redondeado" : undefined}
                         />
                       </td>
                       <td style={{ fontWeight: "600", color: "#334155" }}>{doc.Proveedor}</td>
@@ -259,11 +253,11 @@ export default function RedondeoDocumentos() {
                         {yaRedondeado && (
                           <div style={{ fontSize: "11px", fontWeight: "600", color: "#059669" }}>✓ Redondeado</div>
                         )}
-                        {!yaRedondeado && !montoValido && (
+                        {!yaRedondeado && motivo === "sinMonto" && (
                           <div style={{ fontSize: "11px", fontWeight: "600", color: "#697386" }}>No aplica a redondeo</div>
                         )}
-                        {!yaRedondeado && montoValido && !redondeable && (
-                          <div style={{ fontSize: "11px", fontWeight: "600", color: "#b91c1c" }}>No redondeable</div>
+                        {!yaRedondeado && motivo === "yaEntero" && (
+                          <div style={{ fontSize: "11px", fontWeight: "600", color: "#697386" }}>Documento ya fue redondeado</div>
                         )}
                       </td>
                     </tr>
