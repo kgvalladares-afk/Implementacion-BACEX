@@ -15,6 +15,9 @@ export async function conexion(databaseName) {
             encrypt: true,
             trustServerCertificate: true
         },
+        // Las consultas de Validación de Sello (Seguimiento) hacen varios JOIN + CROSS APPLY
+        // sobre tablas grandes y pueden tardar más de los 15s por defecto de mssql.
+        requestTimeout: 60000,
         pool: {
             max: 10,
             min: 0,
@@ -37,5 +40,6 @@ export let BasesDeDatos = {
     CfoNetCore: 'CfoNetCore',
     AnalisisDeRed: 'AnalisisDeRed',
     Personas: 'Personas',
-    HojaDeRuta: 'HojaDeRuta'
+    HojaDeRuta: 'HojaDeRuta',
+    Seguimiento: 'Seguimiento'
 }

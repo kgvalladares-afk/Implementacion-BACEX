@@ -5,6 +5,7 @@ const port = 3000
 import cfoRoutes from './routes/Cfo.routes.js'
 import hrRoutes from './routes/Hr.routes.js'
 import analisisRoutes from './routes/Analisis.routes.js'
+import seguimientoRoutes from './routes/Seguimiento.routes.js'
 import authRoutes from './routes/Auth.routes.js'
 import 'dotenv/config'
 
@@ -26,6 +27,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api', cfoRoutes);
 app.use('/api', hrRoutes);
 app.use('/api', analisisRoutes);
+app.use('/api', seguimientoRoutes);
 
 app.listen(port, () => {
     console.log(`servidor corriendo ${port}`)

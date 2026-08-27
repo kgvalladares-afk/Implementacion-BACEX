@@ -61,6 +61,13 @@ export default function CambioComponente() {
       showToast("No se encontró el detalle de la referencia principal", "warn");
       return;
     }
+    // El Centro Suministrador y la Oficina de Venta deben quedar como los del componente
+    // nuevo (tomado de la referencia de comparación), no los de la referencia original.
+    const filaComponenteNuevo = componenteData.find((r) => r.Componente_ID === componenteId);
+    if (!filaComponenteNuevo) {
+      showToast("No se encontró el detalle del componente nuevo seleccionado", "warn");
+      return;
+    }
     setActualizandoComponente(true);
     try {
       const resp = await apiFetch(`/actualizarComponente`, {
@@ -69,8 +76,8 @@ export default function CambioComponente() {
         body: JSON.stringify({
           SalesOrderDetalleId: filaActual.SalesOrderDetalleId,
           ComponenteId: componenteId,
-          OficinaVenta: filaActual.OficinaVenta,
-          CentroSuministrador: filaActual.CentroSuministrador,
+          OficinaVenta: filaComponenteNuevo.OficinaVenta,
+          CentroSuministrador: filaComponenteNuevo.CentroSuministrador,
           ModifiedBy: autorizador,
           Observacion: motivo
         })

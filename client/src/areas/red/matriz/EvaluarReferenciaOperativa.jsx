@@ -6,7 +6,7 @@ import { AUTORIZADORES } from "../../cfo/autorizadores.js";
 export const meta = {
   label: "Evaluar Referencia Operativa",
   icon: "🧭",
-  desc: "Reiniciar y volver a evaluar directamente una Referencia Operativa pendiente (HaSidoEvaluado = 0)",
+  desc: "Reiniciar y volver a evaluar directamente una Referencia Operativa, marcando HaSidoEvaluado Sí/No",
 };
 
 export default function EvaluarReferenciaOperativa({ referenciasOperativas = [], onEvaluado }) {
@@ -17,15 +17,13 @@ export default function EvaluarReferenciaOperativa({ referenciasOperativas = [],
   const [procesando, setProcesando] = useState(false);
   const showToast = useToast();
 
-  const pendientes = referenciasOperativas.filter((r) => !r.HaSidoEvaluado);
-
-  if (pendientes.length === 0) {
-    return <p style={{ color: "#697386", fontSize: "14px" }}>No hay Referencias Operativas pendientes de evaluar (HaSidoEvaluado = 0) para esta Gestión.</p>;
+  if (referenciasOperativas.length === 0) {
+    return <p style={{ color: "#697386", fontSize: "14px" }}>No hay Referencias Operativas para esta Gestión.</p>;
   }
 
-  const seleccionada = pendientes.find((r) => r.ReferenciaOperativaId === referenciaOperativaId) || null;
+  const seleccionada = referenciasOperativas.find((r) => r.ReferenciaOperativaId === referenciaOperativaId) || null;
 
-  const handleEjecutar = async () => {
+  const handleActualizar = async () => {
     if (!seleccionada) {
       showToast("Seleccione una Referencia Operativa", "warn");
       return;
@@ -34,14 +32,14 @@ export default function EvaluarReferenciaOperativa({ referenciasOperativas = [],
       showToast("Seleccione quién autoriza antes de continuar", "warn");
       return;
     }
-    if (!window.confirm(`¿Confirma reiniciar y reevaluar la referencia ${seleccionada.Referencia}?`)) {
+    if (!window.confirm(`¿Confirma actualizar HaSidoEvaluado de la referencia ${seleccionada.Referencia} a "${haSidoEvaluado === "true" ? "Sí" : "No"}"?`)) {
       return;
     }
 
     setProcesando(true);
     setResultado(null);
     try {
-      const respActualizar = await apiFetch(`/actualizarHaSidoEvaluado`, {
+      const resp = await apiFetch(`/actualizarHaSidoEvaluado`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -50,24 +48,40 @@ export default function EvaluarReferenciaOperativa({ referenciasOperativas = [],
           usuarioId: autorizador
         })
       });
-      const dataActualizar = await respActualizar.json().catch(() => null);
-      if (!respActualizar.ok) {
-        showToast(dataActualizar?.Message || "Error al actualizar la Referencia Operativa", "warn");
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        showToast(data?.Message || "Error al actualizar la Referencia Operativa", "warn");
         return;
       }
-      showToast(dataActualizar?.Message || "✓ Referencia Operativa actualizada", "ok");
+      showToast(data?.Message || "✓ Referencia Operativa actualizada", "ok");
+      await onEvaluado?.();
+    } catch (error) {
+      showToast("⚠️ Error de conexión con el servidor", "warn");
+    } finally {
+      setProcesando(false);
+    }
+  };
 
-      const respEvaluar = await apiFetch(`/evaluarReferenciaOperativa`, {
+  const handleEvaluar = async () => {
+    if (!seleccionada) {
+      showToast("Seleccione una Referencia Operativa", "warn");
+      return;
+    }
+
+    setProcesando(true);
+    setResultado(null);
+    try {
+      const resp = await apiFetch(`/evaluarReferenciaOperativa`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ referencia: seleccionada.Referencia })
       });
-      const dataEvaluar = await respEvaluar.json().catch(() => null);
-      if (!respEvaluar.ok) {
-        showToast(dataEvaluar?.Message || "Error al evaluar la Referencia Operativa", "warn");
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        showToast(data?.Message || "Error al evaluar la Referencia Operativa", "warn");
         return;
       }
-      setResultado(dataEvaluar?.Data ?? dataEvaluar);
+      setResultado(data?.Data ?? data);
       showToast("✓ Referencia Operativa reevaluada con éxito", "ok");
       setReferenciaOperativaId("");
       setAutorizador("");
@@ -93,7 +107,7 @@ export default function EvaluarReferenciaOperativa({ referenciasOperativas = [],
             style={{ padding: "8px 12px", border: "1px solid #dcdfe6", borderRadius: "6px", fontSize: "13px", background: "#fff", minWidth: "220px" }}
           >
             <option value="">Seleccionar...</option>
-            {pendientes.map((r) => (
+            {referenciasOperativas.map((r) => (
               <option key={r.ReferenciaOperativaId} value={r.ReferenciaOperativaId}>{r.Referencia || "(sin referencia)"}</option>
             ))}
           </select>
@@ -131,8 +145,12 @@ export default function EvaluarReferenciaOperativa({ referenciasOperativas = [],
           </select>
         </div>
 
-        <button className="btn soft" onClick={handleEjecutar} disabled={procesando} style={{ padding: "9px 18px", fontSize: "13px" }}>
-          {procesando ? "Procesando..." : "Actualizar y Evaluar"}
+        <button className="btn soft" onClick={handleActualizar} disabled={procesando} style={{ padding: "9px 18px", fontSize: "13px" }}>
+          {procesando ? "Procesando..." : "Actualizar Estado"}
+        </button>
+
+        <button className="btn primary" onClick={handleEvaluar} disabled={procesando} style={{ padding: "9px 18px", fontSize: "13px" }}>
+          {procesando ? "Procesando..." : "Evaluar"}
         </button>
       </div>
 
