@@ -25,6 +25,25 @@ const DUENO_STYLE = {
   Cliente: { background: "#fef3c7", color: "#92400e" },
 };
 
+// Mismos criterios que ya validaba handleHabilitar; se centralizan aquí para no
+// repetir las condiciones y armar un solo mensaje de toast con el motivo.
+function motivoNoHabilitable(doc) {
+  if (doc["Estado de documento"] === "Habilitado") return "ya se encuentra habilitado";
+  if (doc["Estado de documento"] === "Facturado") return "ya fue facturado y no se puede habilitar";
+  if (doc["Dueño Documento"] !== "Vesta") return "pertenece al cliente; no se puede habilitar desde aquí";
+  return null;
+}
+
+// Misma idea que motivoNoHabilitable, pero para el sentido contrario: solo se
+// puede deshabilitar un documento que actualmente está Habilitado y es del Cliente
+// (habilitar lo pasa de Vesta a Cliente, así que deshabilitar exige lo inverso).
+function motivoNoDeshabilitable(doc) {
+  if (doc["Estado de documento"] === "Inhabilitado") return "ya se encuentra inhabilitado";
+  if (doc["Estado de documento"] === "Facturado") return "ya fue facturado y no se puede deshabilitar";
+  if (doc["Dueño Documento"] !== "Cliente") return "pertenece a Vesta; no se puede deshabilitar desde aquí";
+  return null;
+}
+
 function Badge({ text, style }) {
   return (
     <span style={{
@@ -44,6 +63,7 @@ export default function HabilitarDocumento() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [habilitandoIds, setHabilitandoIds] = useState(() => new Set());
+  const [deshabilitandoIds, setDeshabilitandoIds] = useState(() => new Set());
   const showToast = useToast();
 
   // Proveedor, Cliente y Tipo Documento van fijos a la izquierda, con su ancho real
@@ -105,16 +125,9 @@ export default function HabilitarDocumento() {
   const handleHabilitar = async (doc) => {
     const documentoId = doc.DocumentoId;
 
-    if (doc["Estado de documento"] === "Habilitado") {
-      showToast("El documento ya se encuentra habilitado.", "warn");
-      return;
-    }
-    if (doc["Estado de documento"] === "Facturado") {
-      showToast("El documento ya fue facturado y no se puede habilitar.", "warn");
-      return;
-    }
-    if (doc["Dueño Documento"] !== "Vesta") {
-      showToast("Este documento pertenece al cliente; no se puede habilitar desde aquí.", "warn");
+    const motivo = motivoNoHabilitable(doc);
+    if (motivo) {
+      showToast(`Documento no puede habilitarse, por: ${motivo}`, "warn");
       return;
     }
     if (!autorizador) {
@@ -143,6 +156,47 @@ export default function HabilitarDocumento() {
       showToast("⚠️ Error de conexión con el servidor", "warn");
     } finally {
       setHabilitandoIds((prev) => {
+        const next = new Set(prev);
+        next.delete(documentoId);
+        return next;
+      });
+    }
+  };
+
+  const handleDeshabilitar = async (doc) => {
+    const documentoId = doc.DocumentoId;
+
+    const motivo = motivoNoDeshabilitable(doc);
+    if (motivo) {
+      showToast(`Documento no puede deshabilitarse, por: ${motivo}`, "warn");
+      return;
+    }
+    if (!autorizador) {
+      showToast("Seleccione quién autoriza antes de deshabilitar", "warn");
+      return;
+    }
+    setDeshabilitandoIds((prev) => new Set(prev).add(documentoId));
+    try {
+      const response = await apiFetch(`/deshabilitarDocumento`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ DocumentoId: documentoId, ModifiedBy: autorizador })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        showToast(data?.Message || `Error ${response.status} al deshabilitar el documento`, "warn");
+        return;
+      }
+      setDocumentos((prev) => prev.map((doc) =>
+        doc.DocumentoId === documentoId
+          ? { ...doc, "Estado de documento": "Inhabilitado", "Dueño Documento": "Vesta" }
+          : doc
+      ));
+      showToast(data?.Message || "✓ Documento deshabilitado con éxito", "ok");
+    } catch (error) {
+      showToast("⚠️ Error de conexión con el servidor", "warn");
+    } finally {
+      setDeshabilitandoIds((prev) => {
         const next = new Set(prev);
         next.delete(documentoId);
         return next;
@@ -255,10 +309,18 @@ export default function HabilitarDocumento() {
                       <button
                         className="btn primary"
                         onClick={() => handleHabilitar(doc)}
-                        disabled={habilitandoIds.has(doc.DocumentoId)}
+                        disabled={habilitandoIds.has(doc.DocumentoId) || deshabilitandoIds.has(doc.DocumentoId)}
                         style={{ padding: "6px 12px", fontSize: "12px" }}
                       >
                         {habilitandoIds.has(doc.DocumentoId) ? "Habilitando..." : "Habilitar"}
+                      </button>
+                      <button
+                        className="btn danger"
+                        onClick={() => handleDeshabilitar(doc)}
+                        disabled={habilitandoIds.has(doc.DocumentoId) || deshabilitandoIds.has(doc.DocumentoId)}
+                        style={{ padding: "6px 12px", fontSize: "12px", marginLeft: "6px" }}
+                      >
+                        {deshabilitandoIds.has(doc.DocumentoId) ? "Deshabilitando..." : "Deshabilitar"}
                       </button>
                     </td>
                   </tr>

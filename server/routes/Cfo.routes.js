@@ -260,6 +260,80 @@ app.post('/habilitarDocumento', requirePermission('cfo', 'habDoc'), async (req, 
     }
 });
 
+app.post('/deshabilitarDocumento', requirePermission('cfo', 'habDoc'), async (req, res) => {
+    try {
+        const { DocumentoId, ModifiedBy } = req.body;
+
+        if (!DocumentoId) {
+            return res.status(400).json({ Message: "El documento es requerido." });
+        }
+        if (!ModifiedBy) {
+            return res.status(400).json({ Message: "El usuario que autoriza (ModifiedBy) es requerido." });
+        }
+
+        // 1. Consultar el estado actual en la BD
+        const pool = await conexion(BasesDeDatos.CfoNetCore);
+        const validacion = await pool.request()
+            .input('documentoId', sql.UniqueIdentifier, DocumentoId)
+            .query(`
+                SELECT [ReembolsoStatus_Value], [DueñoDocumento_Value]
+                FROM [dbo].[Documento]
+                WHERE [Id] = @documentoId
+            `);
+
+        if (validacion.recordset.length === 0) {
+            return res.status(404).json({ Message: "No se encontró el documento." });
+        }
+
+        const status = String(validacion.recordset[0].ReembolsoStatus_Value).trim();
+        const dueno = String(validacion.recordset[0].DueñoDocumento_Value).trim();
+
+        // 2. Aplicar regla de negocio (Solo permitir si el estado es 1 = Habilitado y el dueño es Cliente)
+        // El estado se revisa primero por la misma razón que en habilitarDocumento: da un
+        // mensaje más claro que revisar el dueño antes.
+        if (status === '0') {
+            return res.status(400).json({ Message: "El documento ya se encuentra inhabilitado." });
+        }
+        if (status === '2') {
+            return res.status(400).json({ Message: "El documento ya fue facturado y no se puede deshabilitar." });
+        }
+        if (dueno !== '2') {
+            return res.status(400).json({ Message: "Este documento pertenece a Vesta; no se puede deshabilitar desde aquí." });
+        }
+        if (status !== '1') {
+            return res.status(400).json({ Message: `El documento no está en un estado válido para deshabilitarse (Estado: ${status}).` });
+        }
+
+        // 3. Si pasa la validación, consumir la API externa
+        const resp = await fetch("https://cfows.azurewebsites.net/api/Documento/DeshabilitarDocumentos", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ DocumentoId: [DocumentoId], ModifiedBy })
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.text();
+            console.error(`DeshabilitarDocumentos → HTTP ${resp.status} para ${DocumentoId}:`, errData);
+            return res.status(resp.status).json({ Message: "Error al comunicarse con el servicio externo", Detail: errData });
+        }
+
+        const data = await resp.json().catch(() => null);
+        console.log(`DeshabilitarDocumentos → ${DocumentoId}:`, JSON.stringify(data));
+
+        if (data?.IsValid === false) {
+            return res.status(400).json({ Message: mensajeDeAzure(data) || "Azure rechazó la solicitud." });
+        }
+
+        return res.status(200).json({ Message: "Documento deshabilitado con éxito", Data: data });
+
+    } catch (error) {
+        console.error("Error en deshabilitarDocumento:", error);
+        return res.status(500).json({ Message: "Error interno del servidor", Error: error.message });
+    }
+});
+
 app.post('/documentosParaEliminar', requirePermission('cfo', 'elimDoc'), async (req, res) => {
     try {
         const { referencia, referencias } = req.body;
