@@ -21,6 +21,10 @@ function puedeRedondear(monto) {
   return primerDecimal <= 3;
 }
 
+function tieneMonto(monto) {
+  return typeof monto === "number" && isFinite(monto);
+}
+
 export default function RedondeoDocumentos() {
   const [sp, setSp] = useState("");
   const [documentos, setDocumentos] = useState([]);
@@ -231,7 +235,11 @@ export default function RedondeoDocumentos() {
               <tbody>
                 {documentos.map((doc) => {
                   const yaRedondeado = redondeadosIds.has(doc.Id);
+                  const montoValido = tieneMonto(doc.Monto_Documento);
                   const redondeable = puedeRedondear(doc.Monto_Documento);
+                  const colorMonto = yaRedondeado || (montoValido && redondeable)
+                    ? "#334155"
+                    : !montoValido ? "#697386" : "#b91c1c";
                   return (
                     <tr key={doc.Id}>
                       <td>
@@ -240,18 +248,21 @@ export default function RedondeoDocumentos() {
                           checked={seleccionados.has(doc.Id)}
                           onChange={() => handleToggleSeleccion(doc.Id)}
                           disabled={!redondeable || yaRedondeado}
-                          title={!redondeable ? "Este documento excede el límite de 3 centavos permitido para redondeo" : undefined}
+                          title={!montoValido ? "No aplica a redondeo" : !redondeable ? "Este documento excede el límite de 3 centavos permitido para redondeo" : undefined}
                         />
                       </td>
                       <td style={{ fontWeight: "600", color: "#334155" }}>{doc.Proveedor}</td>
                       <td>{doc.Cliente}</td>
                       <td>{doc.Tipo_Documento}</td>
-                      <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: yaRedondeado ? "#334155" : redondeable ? "#334155" : "#b91c1c" }}>
+                      <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: colorMonto }}>
                         {typeof doc.Monto_Documento === "number" ? currencyFmt.format(doc.Monto_Documento) : doc.Monto_Documento}
                         {yaRedondeado && (
                           <div style={{ fontSize: "11px", fontWeight: "600", color: "#059669" }}>✓ Redondeado</div>
                         )}
-                        {!yaRedondeado && !redondeable && (
+                        {!yaRedondeado && !montoValido && (
+                          <div style={{ fontSize: "11px", fontWeight: "600", color: "#697386" }}>No aplica a redondeo</div>
+                        )}
+                        {!yaRedondeado && montoValido && !redondeable && (
                           <div style={{ fontSize: "11px", fontWeight: "600", color: "#b91c1c" }}>No redondeable</div>
                         )}
                       </td>
