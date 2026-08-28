@@ -844,4 +844,85 @@ app.post('/actualizarComponente', requirePermission('cfo', 'cambio'), async (req
     }
 });
 
+// Valores fijos para todo Documento Provisional NIC creado desde este módulo.
+// Lo único que varía por creación es la ReferenciaOperativa; todo lo demás es
+// exactamente el mismo JSON de ejemplo, sin modificar nada.
+const DOCUMENTO_PROVISIONAL_NIC = {
+    Moneda: 558,
+    PaisId: "C7194841-BB94-4903-ADD7-0065CC7AF42C",
+    Observacion: "Creado despues de facturacion, revisar como costearlo",
+    DueñoDocumento: 1,
+    Division: "9095",
+    ProveedorId: "2AD9E57F-6C10-420A-9334-10EDE479CAFB",
+    ClienteId: "2F51BA44-3A35-4AF9-ABC1-12E08D47F362",
+    CreatedBy: "72545B19-EE37-4343-8383-1F5B35DB65D7",
+    Cantidad: 1,
+    PrecioVenta: 183.12,
+    Impuesto: 27.47,
+    Total: 210.59,
+    MaterialProveedorId: "3147E0F0-5F78-481A-9160-163C94291198",
+    TenantId: "2B45F90A-6691-4829-BA76-0F7B53790453",
+    ContextoId: "30D1014C-D443-42EE-8015-005FB0D9FA00",
+    SolicitanteDocumentoId: "72545B19-EE37-4343-8383-1F5B35DB65D7",
+};
+
+app.post('/crearDocumentoProvisionalNic', requirePermission('cfo', 'docProvisionalNic'), async (req, res) => {
+    try {
+        const { ReferenciaOperativa } = req.body;
+
+        if (!ReferenciaOperativa) {
+            return res.status(400).json({ Message: "La Referencia Operativa es requerida." });
+        }
+
+        const resp = await fetch("https://cfows.azurewebsites.net/api/DocumentoProvisional/CreateMany", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                DocumentoProvisionales: [{
+                    ReferenciaOperativa,
+                    Moneda: DOCUMENTO_PROVISIONAL_NIC.Moneda,
+                    PaisId: DOCUMENTO_PROVISIONAL_NIC.PaisId,
+                    Observacion: DOCUMENTO_PROVISIONAL_NIC.Observacion,
+                    DueñoDocumento: DOCUMENTO_PROVISIONAL_NIC.DueñoDocumento,
+                    Division: DOCUMENTO_PROVISIONAL_NIC.Division,
+                    ProveedorId: DOCUMENTO_PROVISIONAL_NIC.ProveedorId,
+                    ClienteId: DOCUMENTO_PROVISIONAL_NIC.ClienteId,
+                    CreatedBy: DOCUMENTO_PROVISIONAL_NIC.CreatedBy,
+                    DocumentoProvisionalDetalles: [{
+                        Cantidad: DOCUMENTO_PROVISIONAL_NIC.Cantidad,
+                        PrecioVenta: DOCUMENTO_PROVISIONAL_NIC.PrecioVenta,
+                        Impuesto: DOCUMENTO_PROVISIONAL_NIC.Impuesto,
+                        Total: DOCUMENTO_PROVISIONAL_NIC.Total,
+                        MaterialProveedorId: DOCUMENTO_PROVISIONAL_NIC.MaterialProveedorId
+                    }],
+                    TenantId: DOCUMENTO_PROVISIONAL_NIC.TenantId
+                }],
+                ContextoId: DOCUMENTO_PROVISIONAL_NIC.ContextoId,
+                SolicitanteDocumentoId: DOCUMENTO_PROVISIONAL_NIC.SolicitanteDocumentoId
+            })
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.text();
+            console.error(`DocumentoProvisional/CreateMany → HTTP ${resp.status} para ${ReferenciaOperativa}:`, errData);
+            return res.status(resp.status).json({ Message: "Error al comunicarse con el servicio externo", Detail: errData });
+        }
+
+        const data = await resp.json().catch(() => null);
+        console.log(`DocumentoProvisional/CreateMany → ${ReferenciaOperativa}:`, JSON.stringify(data));
+
+        if (data?.IsValid === false) {
+            return res.status(400).json({ Message: mensajeDeAzure(data) || "Azure rechazó la solicitud." });
+        }
+
+        return res.status(200).json({ Message: "Documento Provisional creado con éxito", Data: data });
+
+    } catch (error) {
+        console.error("Error en crearDocumentoProvisionalNic:", error);
+        return res.status(500).json({ Message: "Error interno del servidor", Error: error.message });
+    }
+});
+
 export default app;
