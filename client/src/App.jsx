@@ -27,6 +27,7 @@ function AppShell() {
   const areaKeys = Object.keys(visibleAreas);
   const [activeArea, setActiveArea] = useState(() => areaKeys[0] || null);
   const [activeModule, setActiveModule] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const handleAreaChange = (areaKey) => {
     setActiveArea(areaKey);
@@ -59,8 +60,16 @@ function AppShell() {
 
       <div className="main">
         {/* SIDEBAR NAVEGACIÓN GLOBAL */}
-        <aside className="sidebar">
-          <div className="sidebar-label">Módulos</div>
+        {!sidebarOpen && (
+          <div className="sidebar-collapsed-rail">
+            <button className="sidebar-toggle-btn" onClick={() => setSidebarOpen(true)} title="Mostrar módulos">☰</button>
+          </div>
+        )}
+        <aside className="sidebar" style={sidebarOpen ? undefined : { display: "none" }}>
+          <div className="sidebar-label" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span>Módulos</span>
+            <button className="sidebar-toggle-btn" onClick={() => setSidebarOpen(false)} title="Cerrar módulos">✕</button>
+          </div>
 
           {visibleAreas.cfo && (
             <div className={`mod-item m-cfo${activeArea === "cfo" ? " active" : ""}`} onClick={() => handleAreaChange("cfo")}>

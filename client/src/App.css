@@ -118,6 +118,30 @@ body {
   padding: 0 16px 10px;
 }
 
+.sidebar-toggle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--vesta-maroon);
+  font-size: 13px;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.sidebar-toggle-btn:hover {
+  color: var(--vesta-rose);
+}
+
+.sidebar-collapsed-rail {
+  width: 36px;
+  background: #ffffff;
+  border-right: 1px solid var(--border);
+  padding: 20px 0;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+}
+
 .mod-item {
   display: flex;
   align-items: center;
