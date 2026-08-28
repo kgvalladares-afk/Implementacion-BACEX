@@ -16,23 +16,33 @@ const clienteDist = path.join(__dirname, '../client/dist')
 
 app.use(express.json()); //para que acepte jsons
 
-app.use(cors({
-    // Vite toma el primer puerto libre (5173, 5174, 5175...), así que aceptamos cualquier puerto local en dev.
+// El check de CORS solo aplica a /api: el cliente y el servidor viven en el mismo origen
+// en producción, así que los assets estáticos (JS/CSS) no deben pasar por esta validación
+// (el navegador les manda un header Origin por el atributo "crossorigin" del build de Vite,
+// y si se aplicara aquí, el checkeo de "solo localhost" los rechazaría con 500 en producción).
+// RENDER_EXTERNAL_URL lo define Render automáticamente con la URL pública del servicio.
+const origenesPermitidos = [/^http:\/\/localhost:\d+$/];
+if (process.env.RENDER_EXTERNAL_URL) origenesPermitidos.push(process.env.RENDER_EXTERNAL_URL);
+
+const corsOptions = cors({
     origin: (origin, callback) => {
-        if (!origin || /^http:\/\/localhost:\d+$/.test(origin)) {
+        const permitido = !origin || origenesPermitidos.some((o) =>
+            o instanceof RegExp ? o.test(origin) : o === origin
+        );
+        if (permitido) {
             callback(null, true);
         } else {
             callback(new Error("Origen no permitido por CORS"));
         }
     },
     credentials: true
-}))
+})
 
-app.use('/api/auth', authRoutes);
-app.use('/api', cfoRoutes);
-app.use('/api', hrRoutes);
-app.use('/api', analisisRoutes);
-app.use('/api', seguimientoRoutes);
+app.use('/api/auth', corsOptions, authRoutes);
+app.use('/api', corsOptions, cfoRoutes);
+app.use('/api', corsOptions, hrRoutes);
+app.use('/api', corsOptions, analisisRoutes);
+app.use('/api', corsOptions, seguimientoRoutes);
 
 // En producción, el mismo servidor sirve el build del cliente (client/dist), evitando
 // tener que desplegar y configurar dos servicios/dominios separados.
