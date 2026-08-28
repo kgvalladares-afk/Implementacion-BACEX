@@ -1,13 +1,18 @@
 import express from 'express'
 import cors from 'cors'
+import path from 'path'
+import { fileURLToPath } from 'url'
 const app = express()
-const port = 3000
+const port = process.env.PORT || 3000
 import cfoRoutes from './routes/Cfo.routes.js'
 import hrRoutes from './routes/Hr.routes.js'
 import analisisRoutes from './routes/Analisis.routes.js'
 import seguimientoRoutes from './routes/Seguimiento.routes.js'
 import authRoutes from './routes/Auth.routes.js'
 import 'dotenv/config'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const clienteDist = path.join(__dirname, '../client/dist')
 
 app.use(express.json()); //para que acepte jsons
 
@@ -28,6 +33,13 @@ app.use('/api', cfoRoutes);
 app.use('/api', hrRoutes);
 app.use('/api', analisisRoutes);
 app.use('/api', seguimientoRoutes);
+
+// En producción, el mismo servidor sirve el build del cliente (client/dist), evitando
+// tener que desplegar y configurar dos servicios/dominios separados.
+app.use(express.static(clienteDist));
+app.get(/^(?!\/api).*/, (req, res) => {
+    res.sendFile(path.join(clienteDist, 'index.html'));
+});
 
 app.listen(port, () => {
     console.log(`servidor corriendo ${port}`)
