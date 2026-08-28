@@ -205,20 +205,13 @@ app.post('/habilitarDocumento', requirePermission('cfo', 'habDoc'), async (req, 
         }
 
         const status = String(validacion.recordset[0].ReembolsoStatus_Value).trim();
-        const dueno = String(validacion.recordset[0].DueñoDocumento_Value).trim();
 
-        // 2. Aplicar regla de negocio (Solo permitir si el estado es 0 = Inhabilitado y el dueño es Vesta)
-        // El estado se revisa primero: una vez habilitado, el dueño pasa a Cliente como consecuencia,
-        // así que si revisáramos el dueño primero el mensaje sería engañoso (diría "es del cliente"
-        // en vez de "ya está habilitado").
+        // 2. Aplicar regla de negocio (Solo permitir si el estado es 0 = Inhabilitado)
         if (status === '1') {
             return res.status(400).json({ Message: "El documento ya se encuentra habilitado." });
         }
         if (status === '2') {
             return res.status(400).json({ Message: "El documento ya fue facturado y no se puede habilitar." });
-        }
-        if (dueno !== '1') {
-            return res.status(400).json({ Message: "Este documento pertenece al cliente; no se puede habilitar desde aquí." });
         }
         if (status !== '0') {
             return res.status(400).json({ Message: `El documento no está en un estado válido para habilitarse (Estado: ${status}).` });
@@ -282,19 +275,13 @@ app.post('/deshabilitarDocumento', requirePermission('cfo', 'habDoc'), async (re
         }
 
         const status = String(validacion.recordset[0].ReembolsoStatus_Value).trim();
-        const dueno = String(validacion.recordset[0].DueñoDocumento_Value).trim();
 
-        // 2. Aplicar regla de negocio (Solo permitir si el estado es 1 = Habilitado y el dueño es Cliente)
-        // El estado se revisa primero por la misma razón que en habilitarDocumento: da un
-        // mensaje más claro que revisar el dueño antes.
+        // 2. Aplicar regla de negocio (Solo permitir si el estado es 1 = Habilitado)
         if (status === '0') {
             return res.status(400).json({ Message: "El documento ya se encuentra inhabilitado." });
         }
         if (status === '2') {
             return res.status(400).json({ Message: "El documento ya fue facturado y no se puede deshabilitar." });
-        }
-        if (dueno !== '2') {
-            return res.status(400).json({ Message: "Este documento pertenece a Vesta; no se puede deshabilitar desde aquí." });
         }
         if (status !== '1') {
             return res.status(400).json({ Message: `El documento no está en un estado válido para deshabilitarse (Estado: ${status}).` });

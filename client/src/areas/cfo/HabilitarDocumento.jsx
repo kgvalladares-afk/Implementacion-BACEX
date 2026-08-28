@@ -25,25 +25,6 @@ const DUENO_STYLE = {
   Cliente: { background: "#fef3c7", color: "#92400e" },
 };
 
-// Mismos criterios que ya validaba handleHabilitar; se centralizan aquí para no
-// repetir las condiciones y armar un solo mensaje de toast con el motivo.
-function motivoNoHabilitable(doc) {
-  if (doc["Estado de documento"] === "Habilitado") return "ya se encuentra habilitado";
-  if (doc["Estado de documento"] === "Facturado") return "ya fue facturado y no se puede habilitar";
-  if (doc["Dueño Documento"] !== "Vesta") return "pertenece al cliente; no se puede habilitar desde aquí";
-  return null;
-}
-
-// Misma idea que motivoNoHabilitable, pero para el sentido contrario: solo se
-// puede deshabilitar un documento que actualmente está Habilitado y es del Cliente
-// (habilitar lo pasa de Vesta a Cliente, así que deshabilitar exige lo inverso).
-function motivoNoDeshabilitable(doc) {
-  if (doc["Estado de documento"] === "Inhabilitado") return "ya se encuentra inhabilitado";
-  if (doc["Estado de documento"] === "Facturado") return "ya fue facturado y no se puede deshabilitar";
-  if (doc["Dueño Documento"] !== "Cliente") return "pertenece a Vesta; no se puede deshabilitar desde aquí";
-  return null;
-}
-
 function Badge({ text, style }) {
   return (
     <span style={{
@@ -84,13 +65,7 @@ export default function HabilitarDocumento() {
     });
   }, [documentos]);
 
-  const handleBuscar = async () => {
-    const referencias = referencia.split(/[,\s\n]+/).map((r) => r.trim()).filter(Boolean);
-    if (referencias.length === 0) {
-      showToast("Ingrese al menos una Referencia Operativa para buscar", "warn");
-      return;
-    }
-    setLoading(true);
+  const fetchDocumentos = async (referencias) => {
     try {
       const response = await apiFetch(`/documentosPorReferencia`, {
         method: "POST",
@@ -110,6 +85,27 @@ export default function HabilitarDocumento() {
       showToast("⚠️ Error de conexión con el servidor", "warn");
       setDocumentos([]);
       setSearched(true);
+    }
+  };
+
+  // Refresca la tabla con la referencia actualmente filtrada, para que el Estado/Dueño
+  // que se ve en pantalla siempre sea el real del servidor después de habilitar/deshabilitar
+  // (y no una suposición local que puede quedar desactualizada si algo más modificó el documento).
+  const refrescarDocumentos = async () => {
+    const referencias = referencia.split(/[,\s\n]+/).map((r) => r.trim()).filter(Boolean);
+    if (referencias.length === 0) return;
+    await fetchDocumentos(referencias);
+  };
+
+  const handleBuscar = async () => {
+    const referencias = referencia.split(/[,\s\n]+/).map((r) => r.trim()).filter(Boolean);
+    if (referencias.length === 0) {
+      showToast("Ingrese al menos una Referencia Operativa para buscar", "warn");
+      return;
+    }
+    setLoading(true);
+    try {
+      await fetchDocumentos(referencias);
     } finally {
       setLoading(false);
     }
@@ -125,11 +121,6 @@ export default function HabilitarDocumento() {
   const handleHabilitar = async (doc) => {
     const documentoId = doc.DocumentoId;
 
-    const motivo = motivoNoHabilitable(doc);
-    if (motivo) {
-      showToast(`Documento no puede habilitarse, por: ${motivo}`, "warn");
-      return;
-    }
     if (!autorizador) {
       showToast("Seleccione quién autoriza antes de habilitar", "warn");
       return;
@@ -144,14 +135,11 @@ export default function HabilitarDocumento() {
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         showToast(data?.Message || `Error ${response.status} al habilitar el documento`, "warn");
+        await refrescarDocumentos();
         return;
       }
-      setDocumentos((prev) => prev.map((doc) =>
-        doc.DocumentoId === documentoId
-          ? { ...doc, "Estado de documento": "Habilitado", "Dueño Documento": "Cliente" }
-          : doc
-      ));
       showToast(data?.Message || "✓ Documento habilitado con éxito", "ok");
+      await refrescarDocumentos();
     } catch (error) {
       showToast("⚠️ Error de conexión con el servidor", "warn");
     } finally {
@@ -166,11 +154,6 @@ export default function HabilitarDocumento() {
   const handleDeshabilitar = async (doc) => {
     const documentoId = doc.DocumentoId;
 
-    const motivo = motivoNoDeshabilitable(doc);
-    if (motivo) {
-      showToast(`Documento no puede deshabilitarse, por: ${motivo}`, "warn");
-      return;
-    }
     if (!autorizador) {
       showToast("Seleccione quién autoriza antes de deshabilitar", "warn");
       return;
@@ -185,14 +168,11 @@ export default function HabilitarDocumento() {
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         showToast(data?.Message || `Error ${response.status} al deshabilitar el documento`, "warn");
+        await refrescarDocumentos();
         return;
       }
-      setDocumentos((prev) => prev.map((doc) =>
-        doc.DocumentoId === documentoId
-          ? { ...doc, "Estado de documento": "Inhabilitado", "Dueño Documento": "Vesta" }
-          : doc
-      ));
       showToast(data?.Message || "✓ Documento deshabilitado con éxito", "ok");
+      await refrescarDocumentos();
     } catch (error) {
       showToast("⚠️ Error de conexión con el servidor", "warn");
     } finally {
