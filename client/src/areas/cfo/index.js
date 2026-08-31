@@ -6,6 +6,7 @@ import EliminarContraRecibo, { meta as contrareciboMeta } from "./EliminarContra
 import EliminarDocumento, { meta as elimDocMeta } from "./EliminarDocumento.jsx";
 import RedondeoDocumentos, { meta as redondeoMeta } from "./RedondeoDocumentos.jsx";
 import DocumentoProvisionalNic, { meta as docProvisionalNicMeta } from "./DocumentoProvisionalNic.jsx";
+import AnulacionFacturas, { meta as anulacionFacturasMeta } from "./AnulacionFacturas.jsx";
 
 export const label = "CFO / Finanzas";
 export const icon = "📊";
@@ -19,4 +20,5 @@ export const modules = {
   elimDoc: { ...elimDocMeta, Component: EliminarDocumento },
   redondeo: { ...redondeoMeta, Component: RedondeoDocumentos },
   docProvisionalNic: { ...docProvisionalNicMeta, Component: DocumentoProvisionalNic },
+  anulacionFacturas: { ...anulacionFacturasMeta, Component: AnulacionFacturas },
 };

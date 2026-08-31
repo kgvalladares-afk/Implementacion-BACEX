@@ -912,4 +912,57 @@ app.post('/crearDocumentoProvisionalNic', requirePermission('cfo', 'docProvision
     }
 });
 
+app.post('/anularFacturas', requirePermission('cfo', 'anulacionFacturas'), async (req, res) => {
+    try {
+        const { Facturas, Observacion, UsuarioId, Correo } = req.body;
+
+        const facturas = Array.isArray(Facturas) ? Facturas.map((f) => String(f).trim()).filter(Boolean) : [];
+        if (facturas.length === 0) {
+            return res.status(400).json({ Message: "Debe indicar al menos una factura." });
+        }
+        if (!Observacion || !Observacion.trim()) {
+            return res.status(400).json({ Message: "Debe indicar la observación (motivo de la anulación)." });
+        }
+        if (!UsuarioId) {
+            return res.status(400).json({ Message: "El usuario que autoriza es requerido." });
+        }
+        if (!Correo) {
+            return res.status(400).json({ Message: "Tu usuario autorizador no tiene un correo configurado. Pide a un administrador que lo agregue en Administración → Autorizadores." });
+        }
+
+        const resp = await fetch("https://cfows.azurewebsites.net/api/RegistroContable/HabilitarParaRefacturacion", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                UsuarioId,
+                Facturas: facturas,
+                Observacion: Observacion.trim(),
+                correos: [Correo],
+                EnviarCorreo: true
+            })
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.text();
+            console.error(`RegistroContable/HabilitarParaRefacturacion → HTTP ${resp.status} para ${JSON.stringify(facturas)}:`, errData);
+            return res.status(resp.status).json({ Message: "Error al comunicarse con el servicio externo", Detail: errData });
+        }
+
+        const data = await resp.json().catch(() => null);
+        console.log(`RegistroContable/HabilitarParaRefacturacion → ${JSON.stringify(facturas)}:`, JSON.stringify(data));
+
+        if (data?.IsValid === false) {
+            return res.status(400).json({ Message: mensajeDeAzure(data) || "Azure rechazó la solicitud." });
+        }
+
+        return res.status(200).json({ Message: "Factura(s) anulada(s) con éxito", Data: data });
+
+    } catch (error) {
+        console.error("Error en anularFacturas:", error);
+        return res.status(500).json({ Message: "Error interno del servidor", Error: error.message });
+    }
+});
+
 export default app;

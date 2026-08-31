@@ -15,7 +15,7 @@ export function useAutorizadorActual() {
         const response = await apiFetch("/auth/autorizador-actual");
         const data = await response.json().catch(() => null);
         if (!cancelado && response.ok && data) {
-          setAutorizador({ id: data.externalId, name: data.nombre });
+          setAutorizador({ id: data.externalId, name: data.nombre, correo: data.correo || null });
         }
       } catch {
         // Si falla, autorizador queda en null y las pantallas muestran el aviso correspondiente.
