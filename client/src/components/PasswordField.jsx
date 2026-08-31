@@ -27,7 +27,7 @@ function EyeOffIcon() {
   );
 }
 
-export default function PasswordField({ value, onChange, disabled, autoFocus, placeholder, withIcon = false }) {
+export default function PasswordField({ value, onChange, disabled, autoFocus, placeholder, withIcon = false, autoComplete }) {
   const [visible, setVisible] = useState(false);
 
   return (
@@ -44,6 +44,7 @@ export default function PasswordField({ value, onChange, disabled, autoFocus, pl
         disabled={disabled}
         autoFocus={autoFocus}
         placeholder={placeholder}
+        autoComplete={autoComplete}
         style={{ paddingRight: "44px", paddingLeft: withIcon ? "42px" : undefined }}
       />
       <button

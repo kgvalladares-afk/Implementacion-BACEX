@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AUTORIZADORES } from "../autorizadores.js";
+import { useAutorizadorActual } from "../useAutorizadorActual.js";
 
 export const meta = {
   label: "Update Componente",
@@ -9,7 +9,8 @@ export const meta = {
 
 export default function UpdateComponente({ filaActual, opciones = [], onActualizar, actualizando = false }) {
   const [componenteNuevo, setComponenteNuevo] = useState("");
-  const [autorizador, setAutorizador] = useState("");
+  const autorizadorActual = useAutorizadorActual();
+  const autorizador = autorizadorActual?.id || "";
   const [motivo, setMotivo] = useState("");
 
   if (!filaActual) {
@@ -22,7 +23,6 @@ export default function UpdateComponente({ filaActual, opciones = [], onActualiz
     if (!puedeEnviar) return;
     onActualizar?.({ componenteId: componenteNuevo, autorizador, motivo: motivo.trim() });
     setComponenteNuevo("");
-    setAutorizador("");
     setMotivo("");
   };
 
@@ -69,17 +69,9 @@ export default function UpdateComponente({ filaActual, opciones = [], onActualiz
             <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#4f5b66", marginBottom: "6px" }}>
               Autorizado por
             </label>
-            <select
-              value={autorizador}
-              onChange={(e) => setAutorizador(e.target.value)}
-              disabled={actualizando}
-              style={{ width: "100%", padding: "10px 12px", border: "1px solid #dcdfe6", borderRadius: "6px", fontSize: "14px", background: "#fff" }}
-            >
-              <option value="">Seleccionar...</option>
-              {AUTORIZADORES.map((a) => (
-                <option key={a.id} value={a.id}>{a.name}</option>
-              ))}
-            </select>
+            <div style={{ padding: "10px 12px", border: "1px solid #dcdfe6", borderRadius: "6px", fontSize: "14px", background: "#f1f5f9", color: autorizadorActual ? "#1a1f36" : "#b42318" }}>
+              {autorizadorActual?.name || "Tu usuario no está habilitado como autorizador"}
+            </div>
           </div>
 
           <div>

@@ -3,6 +3,7 @@ import { apiFetch } from "../apiClient.js";
 import { areas } from "../areas/index.js";
 import { useToast } from "../components/Toast.jsx";
 import PasswordField from "../components/PasswordField.jsx";
+import AdminAutorizadores from "./AdminAutorizadores.jsx";
 
 function permisoKey(area, modulo) {
   return `${area}:${modulo}`;
@@ -41,10 +42,13 @@ function PermisosChecklist({ selected, onChange, disabled }) {
 export default function AdminUsuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [autorizadores, setAutorizadores] = useState([]);
   const showToast = useToast();
 
+  const [autorizadorSeleccionado, setAutorizadorSeleccionado] = useState("");
   const [nombreUsuario, setNombreUsuario] = useState("");
   const [nombreCompleto, setNombreCompleto] = useState("");
+  const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [permisos, setPermisos] = useState(() => new Set());
@@ -57,6 +61,11 @@ export default function AdminUsuarios() {
   const [editingPasswordUserId, setEditingPasswordUserId] = useState(null);
   const [nuevaPassword, setNuevaPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
+
+  const [editingPerfilUserId, setEditingPerfilUserId] = useState(null);
+  const [editNombreCompleto, setEditNombreCompleto] = useState("");
+  const [editCorreo, setEditCorreo] = useState("");
+  const [savingPerfil, setSavingPerfil] = useState(false);
 
   const cargarUsuarios = async () => {
     setLoading(true);
@@ -75,9 +84,29 @@ export default function AdminUsuarios() {
     }
   };
 
+  const cargarAutorizadores = async () => {
+    try {
+      const response = await apiFetch("/auth/autorizadores");
+      const data = await response.json().catch(() => null);
+      if (response.ok) setAutorizadores(Array.isArray(data) ? data : []);
+    } catch {
+      // Si falla, simplemente no se ofrece el autocompletado; el formulario sigue funcionando manual.
+    }
+  };
+
   useEffect(() => {
     cargarUsuarios();
+    cargarAutorizadores();
   }, []);
+
+  const handleSeleccionarAutorizador = (id) => {
+    setAutorizadorSeleccionado(id);
+    const a = autorizadores.find((item) => String(item.id) === id);
+    if (a) {
+      setNombreCompleto(a.nombre);
+      setCorreo(a.correo || "");
+    }
+  };
 
   const togglePermiso = (area, modulo, checked) => {
     setPermisos((prev) => {
@@ -89,8 +118,10 @@ export default function AdminUsuarios() {
   };
 
   const limpiarFormulario = () => {
+    setAutorizadorSeleccionado("");
     setNombreUsuario("");
     setNombreCompleto("");
+    setCorreo("");
     setPassword("");
     setIsAdmin(false);
     setPermisos(new Set());
@@ -114,6 +145,7 @@ export default function AdminUsuarios() {
         body: JSON.stringify({
           nombreUsuario: nombreUsuario.trim(),
           nombreCompleto: nombreCompleto.trim(),
+          correo: correo.trim(),
           password,
           isAdmin,
           permisos: permisosArray
@@ -180,6 +212,43 @@ export default function AdminUsuarios() {
     }
   };
 
+  const abrirEdicionPerfil = (usuario) => {
+    setEditingPerfilUserId(usuario.id);
+    setEditNombreCompleto(usuario.nombreCompleto);
+    setEditCorreo(usuario.correo || "");
+  };
+
+  const cancelarEdicionPerfil = () => {
+    setEditingPerfilUserId(null);
+  };
+
+  const guardarPerfil = async (usuarioId) => {
+    if (!editNombreCompleto.trim()) {
+      showToast("El nombre completo es requerido", "warn");
+      return;
+    }
+    setSavingPerfil(true);
+    try {
+      const response = await apiFetch(`/auth/usuarios/${usuarioId}/perfil`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombreCompleto: editNombreCompleto.trim(), correo: editCorreo.trim() })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        showToast(data?.Message || "No se pudo actualizar el perfil", "warn");
+        return;
+      }
+      setUsuarios((prev) => prev.map((u) => (u.id === usuarioId ? { ...u, nombreCompleto: editNombreCompleto.trim(), correo: editCorreo.trim() } : u)));
+      showToast("✓ Perfil actualizado", "ok");
+      cancelarEdicionPerfil();
+    } catch (error) {
+      showToast("⚠️ Error de conexión con el servidor", "warn");
+    } finally {
+      setSavingPerfil(false);
+    }
+  };
+
   const abrirCambioPassword = (usuario) => {
     setEditingPasswordUserId(usuario.id);
     setNuevaPassword("");
@@ -243,18 +312,37 @@ export default function AdminUsuarios() {
       </div>
 
       <form onSubmit={handleCrear} style={{ background: "#f8f9fa", padding: "20px", borderRadius: "8px", border: "1px solid #e3e8ee", marginBottom: "30px" }}>
+        {autorizadores.length > 0 && (
+          <div className="field">
+            <label>Autocompletar desde Autorizadores</label>
+            <select
+              value={autorizadorSeleccionado}
+              onChange={(e) => handleSeleccionarAutorizador(e.target.value)}
+              disabled={creando}
+            >
+              <option value="">Seleccionar...</option>
+              {autorizadores.map((a) => (
+                <option key={a.id} value={a.id}>{a.nombre}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Usuario</label>
-            <input type="text" value={nombreUsuario} onChange={(e) => setNombreUsuario(e.target.value)} disabled={creando} />
+            <input type="text" value={nombreUsuario} onChange={(e) => setNombreUsuario(e.target.value)} disabled={creando} autoComplete="off" />
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Nombre completo</label>
             <input type="text" value={nombreCompleto} onChange={(e) => setNombreCompleto(e.target.value)} disabled={creando} />
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
+            <label>Correo</label>
+            <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} disabled={creando} />
+          </div>
+          <div className="field" style={{ marginBottom: 0 }}>
             <label>Contraseña</label>
-            <PasswordField value={password} onChange={(e) => setPassword(e.target.value)} disabled={creando} />
+            <PasswordField value={password} onChange={(e) => setPassword(e.target.value)} disabled={creando} autoComplete="new-password" />
           </div>
           <div className="field" style={{ marginBottom: 0, display: "flex", alignItems: "flex-end" }}>
             <label style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "500" }}>
@@ -290,6 +378,7 @@ export default function AdminUsuarios() {
               <tr>
                 <th>Usuario</th>
                 <th>Nombre completo</th>
+                <th>Correo</th>
                 <th>Tipo</th>
                 <th>Módulos</th>
                 <th>Estado</th>
@@ -302,10 +391,18 @@ export default function AdminUsuarios() {
                   <tr>
                     <td style={{ fontWeight: "600", color: "#334155" }}>{u.nombreUsuario}</td>
                     <td>{u.nombreCompleto}</td>
+                    <td>{u.correo || "—"}</td>
                     <td>{u.isAdmin ? "Administrador" : "Estándar"}</td>
                     <td>{u.isAdmin ? "Todos" : (u.permisos.length || "Ninguno")}</td>
                     <td>{u.activo ? "Activo" : "Inactivo"}</td>
                     <td style={{ textAlign: "right", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                      <button
+                        className="btn ghost"
+                        onClick={() => (editingPerfilUserId === u.id ? cancelarEdicionPerfil() : abrirEdicionPerfil(u))}
+                        style={{ padding: "6px 12px", fontSize: "12px" }}
+                      >
+                        {editingPerfilUserId === u.id ? "Cerrar" : "Editar perfil"}
+                      </button>
                       <button
                         className="btn ghost"
                         onClick={() => (editingUserId === u.id ? cancelarEdicionPermisos() : abrirEdicionPermisos(u))}
@@ -329,9 +426,36 @@ export default function AdminUsuarios() {
                       </button>
                     </td>
                   </tr>
+                  {editingPerfilUserId === u.id && (
+                    <tr>
+                      <td colSpan={7} style={{ background: "#f8f9fa", padding: "18px" }}>
+                        <div style={{ fontSize: "12px", fontWeight: "700", color: "#4f5b66", textTransform: "uppercase", marginBottom: "12px" }}>
+                          Editar perfil de {u.nombreCompleto}
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", maxWidth: "560px" }}>
+                          <div className="field" style={{ marginBottom: 0 }}>
+                            <label>Nombre completo</label>
+                            <input type="text" value={editNombreCompleto} onChange={(e) => setEditNombreCompleto(e.target.value)} disabled={savingPerfil} />
+                          </div>
+                          <div className="field" style={{ marginBottom: 0 }}>
+                            <label>Correo</label>
+                            <input type="email" value={editCorreo} onChange={(e) => setEditCorreo(e.target.value)} disabled={savingPerfil} />
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+                          <button className="btn primary" onClick={() => guardarPerfil(u.id)} disabled={savingPerfil} style={{ padding: "6px 14px", fontSize: "12px" }}>
+                            {savingPerfil ? "Guardando..." : "Guardar perfil"}
+                          </button>
+                          <button className="btn ghost" onClick={cancelarEdicionPerfil} disabled={savingPerfil} style={{ padding: "6px 14px", fontSize: "12px" }}>
+                            Cancelar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   {editingUserId === u.id && (
                     <tr>
-                      <td colSpan={6} style={{ background: "#f8f9fa", padding: "18px" }}>
+                      <td colSpan={7} style={{ background: "#f8f9fa", padding: "18px" }}>
                         <div style={{ fontSize: "12px", fontWeight: "700", color: "#4f5b66", textTransform: "uppercase", marginBottom: "12px" }}>
                           Permisos de {u.nombreCompleto}
                         </div>
@@ -349,7 +473,7 @@ export default function AdminUsuarios() {
                   )}
                   {editingPasswordUserId === u.id && (
                     <tr>
-                      <td colSpan={6} style={{ background: "#f8f9fa", padding: "18px" }}>
+                      <td colSpan={7} style={{ background: "#f8f9fa", padding: "18px" }}>
                         <div style={{ fontSize: "12px", fontWeight: "700", color: "#4f5b66", textTransform: "uppercase", marginBottom: "12px" }}>
                           Nueva contraseña para {u.nombreCompleto}
                         </div>
@@ -358,6 +482,7 @@ export default function AdminUsuarios() {
                             value={nuevaPassword}
                             onChange={(e) => setNuevaPassword(e.target.value)}
                             disabled={savingPassword}
+                            autoComplete="new-password"
                           />
                         </div>
                         <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
@@ -377,6 +502,8 @@ export default function AdminUsuarios() {
           </table>
         </div>
       )}
+
+      <AdminAutorizadores />
     </div>
   );
 }

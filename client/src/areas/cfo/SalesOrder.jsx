@@ -1,8 +1,7 @@
 import { useState } from "react";
-import FormField from "../../components/FormField.jsx";
 import { useToast } from "../../components/Toast.jsx";
 import { apiFetch } from "../../apiClient.js";
-import { AUTORIZADORES } from "./autorizadores.js";
+import { useAutorizadorActual } from "./useAutorizadorActual.js";
 import Aduana, { meta as aduanaMeta } from "./cambioComponente/Aduana.jsx";
 import ValidacionSello, { meta as selloMeta } from "./cambioComponente/ValidacionSello.jsx";
 
@@ -15,12 +14,6 @@ export const meta = {
 
 const fields = [
   { id: "so_num", label: "Referencia Operativa", type: "textarea", placeholder: "SO-01-01\nSO-01-02" },
-  {
-    id: "autorizador",
-    label: "Autorizado por",
-    type: "select",
-    options: AUTORIZADORES
-  }
 ];
 
 // El backend local valida el estado en SQL Server antes de llamar a Azure:
@@ -43,6 +36,7 @@ function classify(ok, message) {
 }
 
 export default function SalesOrder() {
+  const autorizadorActual = useAutorizadorActual();
   const [formValues, setFormValues] = useState({});
   const [loading, setLoading] = useState(false);
   const [soResults, setSoResults] = useState([]);
@@ -128,7 +122,7 @@ export default function SalesOrder() {
 
   const handleSubmit = async () => {
     const rawInput = formValues["so_num"];
-    const autorizador = formValues["autorizador"];
+    const autorizador = autorizadorActual?.id;
     if (!rawInput?.trim() || !autorizador) {
       showToast("Complete los campos obligatorios", "warn");
       return;
@@ -183,7 +177,12 @@ export default function SalesOrder() {
           </div>
 
           <div style={{ marginTop: "24px" }}>
-            <FormField field={fields[1]} value={formValues[fields[1].id]} onChange={handleFieldChange} disabled={loading} />
+            <div className="field">
+              <label>Autorizado por</label>
+              <div style={{ padding: "10px 12px", border: "1px solid #dcdfe6", borderRadius: "6px", fontSize: "14px", background: "#f1f5f9", color: autorizadorActual ? "#1a1f36" : "#b42318" }}>
+                {autorizadorActual?.name || "Tu usuario no está habilitado como autorizador"}
+              </div>
+            </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               <button className="btn primary" onClick={handleSubmit} disabled={loading} style={{ width: "100%" }}>

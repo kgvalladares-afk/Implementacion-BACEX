@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useToast } from "../../components/Toast.jsx";
 import { apiFetch } from "../../apiClient.js";
-import { AUTORIZADORES } from "./autorizadores.js";
+import { useAutorizadorActual } from "./useAutorizadorActual.js";
 
 export const meta = {
   label: "Redondeo de Documentos",
@@ -27,7 +27,8 @@ export default function RedondeoDocumentos() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [seleccionados, setSeleccionados] = useState(() => new Set());
-  const [autorizador, setAutorizador] = useState("");
+  const autorizadorActual = useAutorizadorActual();
+  const autorizador = autorizadorActual?.id || "";
   const [redondeando, setRedondeando] = useState(false);
   const [redondeadosIds, setRedondeadosIds] = useState(() => new Set());
   const showToast = useToast();
@@ -70,7 +71,6 @@ export default function RedondeoDocumentos() {
     setDocumentos([]);
     setSearched(false);
     setSeleccionados(new Set());
-    setAutorizador("");
     setRedondeadosIds(new Set());
   };
 
@@ -178,16 +178,9 @@ export default function RedondeoDocumentos() {
         <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#4f5b66", margin: "16px 0 8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
           Autorizado por
         </label>
-        <select
-          value={autorizador}
-          onChange={(e) => setAutorizador(e.target.value)}
-          style={{ width: "100%", padding: "10px 12px", border: "1px solid #dcdfe6", borderRadius: "6px", fontSize: "14px", background: "#fff" }}
-        >
-          <option value="">Seleccionar...</option>
-          {AUTORIZADORES.map((a) => (
-            <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-        </select>
+        <div style={{ padding: "10px 12px", border: "1px solid #dcdfe6", borderRadius: "6px", fontSize: "14px", background: "#f1f5f9", color: autorizadorActual ? "#1a1f36" : "#b42318" }}>
+          {autorizadorActual?.name || "Tu usuario no está habilitado como autorizador"}
+        </div>
       </div>
 
       {searched && documentos.length === 0 && (

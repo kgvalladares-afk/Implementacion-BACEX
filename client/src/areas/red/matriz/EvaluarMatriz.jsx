@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useToast } from "../../../components/Toast.jsx";
 import { apiFetch } from "../../../apiClient.js";
-import { AUTORIZADORES } from "../../cfo/autorizadores.js";
+import { useAutorizadorActual } from "../../cfo/useAutorizadorActual.js";
 
 export const meta = {
   label: "Evaluar Matriz",
@@ -11,7 +11,8 @@ export const meta = {
 
 export default function EvaluarMatriz({ solicitudes = [], tipoSolicitudId, onEvaluado }) {
   const [vigente, setVigente] = useState("true");
-  const [autorizador, setAutorizador] = useState("");
+  const autorizadorActual = useAutorizadorActual();
+  const autorizador = autorizadorActual?.id || "";
   const [resultado, setResultado] = useState(null);
   const [procesando, setProcesando] = useState(false);
   const showToast = useToast();
@@ -98,17 +99,9 @@ export default function EvaluarMatriz({ solicitudes = [], tipoSolicitudId, onEva
           <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#4f5b66", marginBottom: "6px" }}>
             Autorizado por
           </label>
-          <select
-            value={autorizador}
-            onChange={(e) => setAutorizador(e.target.value)}
-            disabled={procesando}
-            style={{ padding: "8px 12px", border: "1px solid #dcdfe6", borderRadius: "6px", fontSize: "13px", background: "#fff", minWidth: "200px" }}
-          >
-            <option value="">Seleccionar...</option>
-            {AUTORIZADORES.map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
-          </select>
+          <div style={{ padding: "8px 12px", border: "1px solid #dcdfe6", borderRadius: "6px", fontSize: "13px", background: "#f1f5f9", minWidth: "200px", color: autorizadorActual ? "#1a1f36" : "#b42318" }}>
+            {autorizadorActual?.name || "Tu usuario no está habilitado como autorizador"}
+          </div>
         </div>
 
         <button className="btn soft" onClick={handleEjecutar} disabled={procesando} style={{ padding: "9px 18px", fontSize: "13px" }}>
