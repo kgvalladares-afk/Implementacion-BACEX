@@ -68,10 +68,35 @@ export default function EvaluarReferenciaOperativa({ referenciasOperativas = [],
       showToast("Seleccione una Referencia Operativa", "warn");
       return;
     }
+    if (!autorizador) {
+      showToast("Seleccione quién autoriza antes de continuar", "warn");
+      return;
+    }
+    if (!window.confirm(`¿Confirma reiniciar y volver a evaluar la referencia ${seleccionada.Referencia}?`)) {
+      return;
+    }
 
     setProcesando(true);
     setResultado(null);
     try {
+      // El servicio externo rechaza evaluar una referencia que sigue marcada como ya
+      // evaluada ("La Referencia ... ya ha sido evaluada"), así que primero se reinicia
+      // HaSidoEvaluado a No y solo si eso funciona se procede a evaluar.
+      const respReinicio = await apiFetch(`/actualizarHaSidoEvaluado`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          referenciaOperativaId: seleccionada.ReferenciaOperativaId,
+          haSidoEvaluado: false,
+          usuarioId: autorizador
+        })
+      });
+      const dataReinicio = await respReinicio.json().catch(() => null);
+      if (!respReinicio.ok) {
+        showToast(dataReinicio?.Message || "Error al reiniciar la Referencia Operativa antes de evaluar", "warn");
+        return;
+      }
+
       const resp = await apiFetch(`/evaluarReferenciaOperativa`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -83,7 +108,7 @@ export default function EvaluarReferenciaOperativa({ referenciasOperativas = [],
         return;
       }
       setResultado(data?.Data ?? data);
-      showToast("✓ Referencia Operativa reevaluada con éxito", "ok");
+      showToast("✓ Referencia Operativa reiniciada y reevaluada con éxito", "ok");
       setReferenciaOperativaId("");
       await onEvaluado?.();
     } catch (error) {

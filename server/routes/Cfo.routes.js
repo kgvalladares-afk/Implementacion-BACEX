@@ -912,6 +912,112 @@ app.post('/crearDocumentoProvisionalNic', requirePermission('cfo', 'docProvision
     }
 });
 
+app.post('/facturasPorReferencia', requirePermission('cfo', 'anulacionFacturas'), async (req, res) => {
+    try {
+        const { referencias } = req.body;
+        const listaReferencias = Array.isArray(referencias)
+            ? referencias.map((r) => String(r).trim()).filter(Boolean)
+            : [];
+
+        if (listaReferencias.length === 0) {
+            return res.status(400).json({ Message: "Debe indicar al menos una Referencia Operativa." });
+        }
+
+        const pool = await conexion(BasesDeDatos.CfoNetCore);
+        const request = pool.request();
+        const parametros = listaReferencias.map((valor, i) => {
+            const nombre = `ref${i}`;
+            request.input(nombre, sql.VarChar, valor);
+            return `@${nombre}`;
+        });
+
+        const resultado = await request.query(`
+            SELECT 'Fiscal' AS Tipo, SO.ReferenciaOperativa, RC.NumeroFacturaSap, RC.IsSoftDeleted
+            FROM dbo.SalesOrder SO
+            LEFT JOIN dbo.RegistroContable RC ON RC.Id = SO.RegistroContableId
+            WHERE SO.ReferenciaOperativa IN (${parametros.join(", ")})
+              AND SO.Status_Value = 3
+
+            SELECT 'Nota de Reembolso' AS Tipo, D.ReferenciaOperativa, RC.NumeroFacturaSap, RC.IsSoftDeleted
+            FROM dbo.Documento D
+            LEFT JOIN dbo.RegistroContable RC ON RC.Id = D.RegistroContableFacturaId
+            WHERE D.ReferenciaOperativa IN (${parametros.join(", ")})
+              AND D.ReembolsoStatus_Value = 2 AND D.FondoId IS NULL
+
+            -- Al anular una factura, el Status_Value/ReembolsoStatus_Value del SalesOrder o
+            -- Documento cambia, así que las dos consultas de arriba dejan de encontrarla y
+            -- desaparecería de los resultados. Esta consulta aparte la vuelve a traer,
+            -- buscando directamente RegistroContable ya anulados (IsSoftDeleted = 1) para
+            -- la misma referencia, sin importar el estado actual del SalesOrder/Documento.
+            SELECT 'Fiscal' AS Tipo, SO.ReferenciaOperativa, RC.NumeroFacturaSap, RC.IsSoftDeleted
+            FROM dbo.SalesOrder SO
+            INNER JOIN dbo.RegistroContable RC ON RC.Id = SO.RegistroContableId
+            WHERE SO.ReferenciaOperativa IN (${parametros.join(", ")})
+              AND RC.IsSoftDeleted = 1
+
+            SELECT 'Nota de Reembolso' AS Tipo, D.ReferenciaOperativa, RC.NumeroFacturaSap, RC.IsSoftDeleted
+            FROM dbo.Documento D
+            INNER JOIN dbo.RegistroContable RC ON RC.Id = D.RegistroContableFacturaId
+            WHERE D.ReferenciaOperativa IN (${parametros.join(", ")})
+              AND RC.IsSoftDeleted = 1
+        `);
+
+        const facturas = [...(resultado.recordsets[0] || []), ...(resultado.recordsets[1] || []), ...(resultado.recordsets[2] || []), ...(resultado.recordsets[3] || [])]
+            .map((f) => ({ ...f, Estado: f.IsSoftDeleted ? "Anulada" : "Habilitada" }));
+        return res.json(facturas);
+
+    } catch (error) {
+        console.error("Error en facturasPorReferencia:", error);
+        return res.status(500).json({ Message: "Error al buscar facturas", Error: error.message });
+    }
+});
+
+// Igual que facturasPorReferencia pero filtrando directamente por NumeroFacturaSap: para
+// cuando solo se conoce el número de factura. Como ya se tiene el número exacto, no se
+// exige que el SalesOrder/Documento esté en un estado en particular (a diferencia de
+// facturasPorReferencia) — así una factura ya anulada también aparece, con su Estado real,
+// en vez de no encontrarse.
+app.post('/facturasPorNumero', requirePermission('cfo', 'anulacionFacturas'), async (req, res) => {
+    try {
+        const { facturas } = req.body;
+        const listaFacturas = Array.isArray(facturas)
+            ? facturas.map((f) => String(f).trim()).filter(Boolean)
+            : [];
+
+        if (listaFacturas.length === 0) {
+            return res.status(400).json({ Message: "Debe indicar al menos un número de factura." });
+        }
+
+        const pool = await conexion(BasesDeDatos.CfoNetCore);
+        const request = pool.request();
+        const parametros = listaFacturas.map((valor, i) => {
+            const nombre = `fac${i}`;
+            request.input(nombre, sql.VarChar, valor);
+            return `@${nombre}`;
+        });
+
+        const resultado = await request.query(`
+            SELECT 'Fiscal' AS Tipo, SO.ReferenciaOperativa, RC.NumeroFacturaSap, RC.IsSoftDeleted
+            FROM dbo.SalesOrder SO
+            INNER JOIN dbo.RegistroContable RC ON RC.Id = SO.RegistroContableId
+            WHERE RC.NumeroFacturaSap IN (${parametros.join(", ")})
+
+            SELECT 'Nota de Reembolso' AS Tipo, D.ReferenciaOperativa, RC.NumeroFacturaSap, RC.IsSoftDeleted
+            FROM dbo.Documento D
+            INNER JOIN dbo.RegistroContable RC ON RC.Id = D.RegistroContableFacturaId
+            WHERE RC.NumeroFacturaSap IN (${parametros.join(", ")})
+        `);
+
+        const resultados = [...(resultado.recordsets[0] || []), ...(resultado.recordsets[1] || [])]
+            .map((f) => ({ ...f, Estado: f.IsSoftDeleted ? "Anulada" : "Habilitada" }));
+        return res.json(resultados);
+
+    } catch (error) {
+        console.error("Error en facturasPorNumero:", error);
+        return res.status(500).json({ Message: "Error al buscar facturas", Error: error.message });
+    }
+});
+
 app.post('/anularFacturas', requirePermission('cfo', 'anulacionFacturas'), async (req, res) => {
     try {
         const { Facturas, Observacion, UsuarioId, Correo } = req.body;

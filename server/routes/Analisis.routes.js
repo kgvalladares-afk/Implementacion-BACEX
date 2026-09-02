@@ -219,7 +219,14 @@ app.post('/evaluarReferenciaOperativa', requirePermission('red', 'matriz'), asyn
         }
 
         const data = await resp.json().catch(() => null);
-        return res.status(200).json({ Data: data });
+        console.log(`AnalisisCriterioTestApi/EvaluarReferenciaOperativaByReferencia → ${referencia}:`, JSON.stringify(data));
+
+        if (data?.IsValid === false) {
+            const mensaje = Array.isArray(data.Message) ? data.Message.join(' ') : data.Message;
+            return res.status(400).json({ Message: mensaje || "El servicio rechazó la solicitud." });
+        }
+
+        return res.status(200).json({ Message: "Referencia Operativa reevaluada con éxito", Data: data });
 
     } catch (error) {
         console.error("Error en evaluarReferenciaOperativa:", error);
