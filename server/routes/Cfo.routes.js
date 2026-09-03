@@ -924,9 +924,41 @@ app.post('/facturasPorReferencia', requirePermission('cfo', 'anulacionFacturas')
         }
 
         const pool = await conexion(BasesDeDatos.CfoNetCore);
+
+        // REPLACE(columna, '-', '') = @valor vuelve la búsqueda no-sargable (no puede usar
+        // índice); en la tabla Documento (grande) eso causa un escaneo completo demasiado
+        // lento (probado: >60s y vence el timeout). Combinarlo con OR/subquery en el mismo
+        // WHERE es igual de lento incluso contra SalesOrder, porque hace que el optimizador
+        // deseche el índice para todo el predicado (probado también). Por eso va en dos
+        // pasos separados: 1) resolver la forma exacta (con guiones) contra SalesOrder, que
+        // sí tolera el REPLACE por ser una tabla chica; 2) buscar en Documento con IN plano
+        // (rápido, sí usa índice) usando esa forma resuelta más lo que el usuario escribió
+        // tal cual (por si ya tecleó los guiones correctos).
+        const parametrosSinGuion1 = listaReferencias.map((valor, i) => {
+            const nombre = `refS${i}`;
+            return { nombre, valor: valor.replace(/-/g, '') };
+        });
+
+        const requestResolver = pool.request();
+        parametrosSinGuion1.forEach(({ nombre, valor }) => requestResolver.input(nombre, sql.VarChar, valor));
+        const resueltos = await requestResolver.query(`
+            SELECT DISTINCT ReferenciaOperativa FROM dbo.SalesOrder
+            WHERE REPLACE(ReferenciaOperativa, '-', '') IN (${parametrosSinGuion1.map((p) => `@${p.nombre}`).join(", ")})
+        `);
+
+        const referenciasResueltas = [...new Set([
+            ...listaReferencias,
+            ...resueltos.recordset.map((r) => r.ReferenciaOperativa)
+        ])];
+
         const request = pool.request();
-        const parametros = listaReferencias.map((valor, i) => {
-            const nombre = `ref${i}`;
+        const parametrosSinGuion = listaReferencias.map((valor, i) => {
+            const nombre = `refS${i}`;
+            request.input(nombre, sql.VarChar, valor.replace(/-/g, ''));
+            return `@${nombre}`;
+        });
+        const parametrosResueltos = referenciasResueltas.map((valor, i) => {
+            const nombre = `refR${i}`;
             request.input(nombre, sql.VarChar, valor);
             return `@${nombre}`;
         });
@@ -935,14 +967,14 @@ app.post('/facturasPorReferencia', requirePermission('cfo', 'anulacionFacturas')
             SELECT 'Fiscal' AS Tipo, SO.ReferenciaOperativa, RC.NumeroFacturaSap, RC.IsSoftDeleted
             FROM dbo.SalesOrder SO
             LEFT JOIN dbo.RegistroContable RC ON RC.Id = SO.RegistroContableId
-            WHERE SO.ReferenciaOperativa IN (${parametros.join(", ")})
+            WHERE REPLACE(SO.ReferenciaOperativa, '-', '') IN (${parametrosSinGuion.join(", ")})
               AND SO.Status_Value = 3
 
             SELECT 'Nota de Reembolso' AS Tipo, D.ReferenciaOperativa, RC.NumeroFacturaSap, RC.IsSoftDeleted
             FROM dbo.Documento D
             LEFT JOIN dbo.RegistroContable RC ON RC.Id = D.RegistroContableFacturaId
-            WHERE D.ReferenciaOperativa IN (${parametros.join(", ")})
-              AND D.ReembolsoStatus_Value = 2 AND D.FondoId IS NULL
+            WHERE D.ReferenciaOperativa IN (${parametrosResueltos.join(", ")})
+              AND D.ReembolsoStatus_Value = 2
 
             -- Al anular una factura, el Status_Value/ReembolsoStatus_Value del SalesOrder o
             -- Documento cambia, así que las dos consultas de arriba dejan de encontrarla y
@@ -952,13 +984,13 @@ app.post('/facturasPorReferencia', requirePermission('cfo', 'anulacionFacturas')
             SELECT 'Fiscal' AS Tipo, SO.ReferenciaOperativa, RC.NumeroFacturaSap, RC.IsSoftDeleted
             FROM dbo.SalesOrder SO
             INNER JOIN dbo.RegistroContable RC ON RC.Id = SO.RegistroContableId
-            WHERE SO.ReferenciaOperativa IN (${parametros.join(", ")})
+            WHERE REPLACE(SO.ReferenciaOperativa, '-', '') IN (${parametrosSinGuion.join(", ")})
               AND RC.IsSoftDeleted = 1
 
             SELECT 'Nota de Reembolso' AS Tipo, D.ReferenciaOperativa, RC.NumeroFacturaSap, RC.IsSoftDeleted
             FROM dbo.Documento D
             INNER JOIN dbo.RegistroContable RC ON RC.Id = D.RegistroContableFacturaId
-            WHERE D.ReferenciaOperativa IN (${parametros.join(", ")})
+            WHERE D.ReferenciaOperativa IN (${parametrosResueltos.join(", ")})
               AND RC.IsSoftDeleted = 1
         `);
 
