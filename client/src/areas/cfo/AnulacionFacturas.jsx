@@ -58,16 +58,17 @@ export default function AnulacionFacturas() {
   const [buscado, setBuscado] = useState(false);
   const [facturasEncontradas, setFacturasEncontradas] = useState([]);
 
-  // Orden de lectura: por Referencia Operativa, luego Tipo, luego N° Factura — así la
-  // tabla en pantalla, el CSV descargado y el resumen copiado siempre salen en el mismo
-  // orden consistente, sin importar en qué orden se fueron agregando los resultados.
+  // Orden de lectura: primero agrupadas por Tipo (todas las Fiscal juntas, luego todas
+  // las Nota de Reembolso), y dentro de cada grupo por Referencia Operativa y N° Factura —
+  // así la tabla en pantalla, el CSV descargado y el resumen copiado siempre salen en el
+  // mismo orden consistente, sin mezclar los dos tipos entre referencias distintas.
   const compararFacturas = (a, b) => {
-    const refA = a.ReferenciaOperativa || "";
-    const refB = b.ReferenciaOperativa || "";
-    if (refA !== refB) return refA.localeCompare(refB);
     const tipoA = a.Tipo || "";
     const tipoB = b.Tipo || "";
     if (tipoA !== tipoB) return tipoA.localeCompare(tipoB);
+    const refA = a.ReferenciaOperativa || "";
+    const refB = b.ReferenciaOperativa || "";
+    if (refA !== refB) return refA.localeCompare(refB);
     return String(a.NumeroFacturaSap || "").localeCompare(String(b.NumeroFacturaSap || ""));
   };
 
@@ -376,6 +377,7 @@ export default function AnulacionFacturas() {
                 <tbody>
                   {facturasEncontradas.map((f, i) => {
                     const yaAnulada = f.Estado === "Anulada";
+                    const yaAgregada = !!f.NumeroFacturaSap && facturasSeleccionadas.includes(f.NumeroFacturaSap);
                     return (
                       <tr key={`${f.ReferenciaOperativa}-${f.Tipo}-${i}`}>
                         <td style={{ color: "#697386" }}>{i + 1}</td>
@@ -390,13 +392,13 @@ export default function AnulacionFacturas() {
                         <td style={{ textAlign: "right" }}>
                           <button
                             type="button"
-                            className="btn ghost"
+                            className={yaAgregada ? "btn soft" : "btn ghost"}
                             onClick={() => handleAgregarFactura(f.NumeroFacturaSap)}
-                            disabled={!f.NumeroFacturaSap || yaAnulada}
-                            title={yaAnulada ? "Esta factura ya fue anulada anteriormente" : undefined}
+                            disabled={!f.NumeroFacturaSap || yaAnulada || yaAgregada}
+                            title={yaAnulada ? "Esta factura ya fue anulada anteriormente" : yaAgregada ? "Ya está en la lista para anular" : undefined}
                             style={{ padding: "4px 12px", fontSize: "12px" }}
                           >
-                            Agregar
+                            {yaAgregada ? "✓ Agregada" : "Agregar"}
                           </button>
                         </td>
                       </tr>
@@ -474,26 +476,40 @@ export default function AnulacionFacturas() {
       </form>
 
       {ultimoResultado && (
-        <div style={{ border: "1px solid #d1fae5", background: "#f0fdf9", borderRadius: "8px", padding: "20px" }}>
-          <div style={{ fontSize: "15px", fontWeight: "700", color: "#065f46", marginBottom: "10px" }}>
+        <div style={{ border: "1px solid #d1fae5", background: "#f0fdf9", borderRadius: "8px", padding: "20px", maxWidth: "100%", overflow: "hidden" }}>
+          <div style={{ fontSize: "15px", fontWeight: "700", color: "#065f46", marginBottom: "14px" }}>
             ✓ Última anulación realizada
           </div>
-          <table className="doc-table" style={{ width: "100%" }}>
-            <tbody>
-              <tr>
-                <td style={{ fontWeight: "600", color: "#334155", width: "180px" }}>Facturas</td>
-                <td>{ultimoResultado.facturas.join(", ")}</td>
-              </tr>
-              <tr>
-                <td style={{ fontWeight: "600", color: "#334155" }}>Observación</td>
-                <td>{ultimoResultado.observacion}</td>
-              </tr>
-              <tr>
-                <td style={{ fontWeight: "600", color: "#334155" }}>Notificado a</td>
-                <td>{ultimoResultado.correo || "—"}</td>
-              </tr>
-            </tbody>
-          </table>
+
+          <div style={{ marginBottom: "14px" }}>
+            <div style={{ fontSize: "12px", fontWeight: "700", color: "#4f5b66", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>
+              Facturas ({ultimoResultado.facturas.length})
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+              {ultimoResultado.facturas.map((factura) => (
+                <span key={factura} style={{
+                  background: "#d1fae5", color: "#065f46", borderRadius: "999px",
+                  padding: "3px 10px", fontSize: "13px", fontWeight: "600"
+                }}>
+                  {factura}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: "10px" }}>
+            <div style={{ fontSize: "12px", fontWeight: "700", color: "#4f5b66", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>
+              Observación
+            </div>
+            <div style={{ fontSize: "14px", color: "#334155", wordBreak: "break-word" }}>{ultimoResultado.observacion}</div>
+          </div>
+
+          <div>
+            <div style={{ fontSize: "12px", fontWeight: "700", color: "#4f5b66", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>
+              Notificado a
+            </div>
+            <div style={{ fontSize: "14px", color: "#334155", wordBreak: "break-word" }}>{ultimoResultado.correo || "—"}</div>
+          </div>
         </div>
       )}
     </div>
