@@ -450,7 +450,7 @@ export default function AnulacionFacturas() {
         <div className="field" style={{ marginBottom: "20px" }}>
           <label>Observación (motivo de la anulación)</label>
           <textarea
-            placeholder="Ej: Se elimina para refacturación, Solicitud SMA-ES-26-917"
+            placeholder="Ej: Se elimina para refacturación"
             value={observacion}
             onChange={(e) => setObservacion(e.target.value)}
             disabled={enviando}

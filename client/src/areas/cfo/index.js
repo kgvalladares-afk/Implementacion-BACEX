@@ -22,3 +22,10 @@ export const modules = {
   docProvisionalNic: { ...docProvisionalNicMeta, Component: DocumentoProvisionalNic },
   anulacionFacturas: { ...anulacionFacturasMeta, Component: AnulacionFacturas },
 };
+
+// Agrupa los módulos de CFO en el sidebar para que no se vean como una lista plana larga.
+export const groups = [
+  { label: "Gestión", modules: ["negociaciones", "cambio", "salesorder"] },
+  { label: "Documentos", modules: ["habDoc", "redondeo", "docProvisionalNic"] },
+  { label: "Eliminación", modules: ["contrarecibo", "elimDoc", "anulacionFacturas"] },
+];

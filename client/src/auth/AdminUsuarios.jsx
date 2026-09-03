@@ -1,12 +1,89 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { apiFetch } from "../apiClient.js";
 import { areas } from "../areas/index.js";
 import { useToast } from "../components/Toast.jsx";
 import PasswordField from "../components/PasswordField.jsx";
-import AdminAutorizadores from "./AdminAutorizadores.jsx";
 
 function permisoKey(area, modulo) {
   return `${area}:${modulo}`;
+}
+
+// Busca en vivo contra la BD de Personas mientras se escribe el nombre completo, y al
+// elegir una coincidencia llena también el correo y guarda el Id real (personaId) que
+// se manda como ModifiedBy/UsuarioId a los servicios externos.
+function PersonaBuscador({ nombre, onChangeNombre, onSeleccionar, disabled }) {
+  const [resultados, setResultados] = useState([]);
+  const [mostrando, setMostrando] = useState(false);
+  const debounceRef = useRef(null);
+
+  const buscar = (texto) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!texto.trim()) {
+      setResultados([]);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const response = await apiFetch("/auth/personas/buscar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ texto })
+        });
+        const data = await response.json().catch(() => null);
+        if (response.ok) setResultados(Array.isArray(data) ? data : []);
+      } catch {
+        // Sin resultados si falla; se puede seguir escribiendo el nombre manualmente.
+      }
+    }, 350);
+  };
+
+  const handleChange = (e) => {
+    const texto = e.target.value;
+    onChangeNombre(texto);
+    setMostrando(true);
+    buscar(texto);
+  };
+
+  const handleSeleccionar = (persona) => {
+    onSeleccionar(persona);
+    setResultados([]);
+    setMostrando(false);
+  };
+
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        type="text"
+        value={nombre}
+        onChange={handleChange}
+        onFocus={() => setMostrando(true)}
+        onBlur={() => setTimeout(() => setMostrando(false), 150)}
+        disabled={disabled}
+        placeholder="Escriba para buscar en Personas..."
+        autoComplete="off"
+      />
+      {mostrando && resultados.length > 0 && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 20,
+          background: "white", border: "1px solid #dcdfe6", borderRadius: "6px",
+          boxShadow: "0 8px 20px rgba(0,0,0,0.12)", maxHeight: "220px", overflowY: "auto"
+        }}>
+          {resultados.map((p) => (
+            <div
+              key={p.id}
+              onMouseDown={() => handleSeleccionar(p)}
+              style={{ padding: "8px 12px", fontSize: "13px", cursor: "pointer", borderBottom: "1px solid #f1f2f4" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#f8f9fa")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "white")}
+            >
+              <div style={{ fontWeight: "600", color: "#1a1f36" }}>{p.nombre}</div>
+              <div style={{ color: "#94a3b8", fontSize: "11px" }}>{p.correo}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function PermisosChecklist({ selected, onChange, disabled }) {
@@ -39,16 +116,21 @@ function PermisosChecklist({ selected, onChange, disabled }) {
   );
 }
 
+export const meta = {
+  label: "Usuarios",
+  icon: "👤",
+  desc: "Crea usuarios y define a qué módulos tiene acceso cada uno",
+};
+
 export default function AdminUsuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [autorizadores, setAutorizadores] = useState([]);
   const showToast = useToast();
 
-  const [autorizadorSeleccionado, setAutorizadorSeleccionado] = useState("");
   const [nombreUsuario, setNombreUsuario] = useState("");
   const [nombreCompleto, setNombreCompleto] = useState("");
   const [correo, setCorreo] = useState("");
+  const [personaId, setPersonaId] = useState("");
   const [password, setPassword] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [permisos, setPermisos] = useState(() => new Set());
@@ -65,6 +147,7 @@ export default function AdminUsuarios() {
   const [editingPerfilUserId, setEditingPerfilUserId] = useState(null);
   const [editNombreCompleto, setEditNombreCompleto] = useState("");
   const [editCorreo, setEditCorreo] = useState("");
+  const [editPersonaId, setEditPersonaId] = useState("");
   const [savingPerfil, setSavingPerfil] = useState(false);
 
   const cargarUsuarios = async () => {
@@ -84,28 +167,14 @@ export default function AdminUsuarios() {
     }
   };
 
-  const cargarAutorizadores = async () => {
-    try {
-      const response = await apiFetch("/auth/autorizadores");
-      const data = await response.json().catch(() => null);
-      if (response.ok) setAutorizadores(Array.isArray(data) ? data : []);
-    } catch {
-      // Si falla, simplemente no se ofrece el autocompletado; el formulario sigue funcionando manual.
-    }
-  };
-
   useEffect(() => {
     cargarUsuarios();
-    cargarAutorizadores();
   }, []);
 
-  const handleSeleccionarAutorizador = (id) => {
-    setAutorizadorSeleccionado(id);
-    const a = autorizadores.find((item) => String(item.id) === id);
-    if (a) {
-      setNombreCompleto(a.nombre);
-      setCorreo(a.correo || "");
-    }
+  const handleSeleccionarPersona = (persona) => {
+    setNombreCompleto(persona.nombre);
+    setCorreo(persona.correo || "");
+    setPersonaId(persona.id);
   };
 
   const togglePermiso = (area, modulo, checked) => {
@@ -118,10 +187,10 @@ export default function AdminUsuarios() {
   };
 
   const limpiarFormulario = () => {
-    setAutorizadorSeleccionado("");
     setNombreUsuario("");
     setNombreCompleto("");
     setCorreo("");
+    setPersonaId("");
     setPassword("");
     setIsAdmin(false);
     setPermisos(new Set());
@@ -146,6 +215,7 @@ export default function AdminUsuarios() {
           nombreUsuario: nombreUsuario.trim(),
           nombreCompleto: nombreCompleto.trim(),
           correo: correo.trim(),
+          personaId,
           password,
           isAdmin,
           permisos: permisosArray
@@ -216,6 +286,13 @@ export default function AdminUsuarios() {
     setEditingPerfilUserId(usuario.id);
     setEditNombreCompleto(usuario.nombreCompleto);
     setEditCorreo(usuario.correo || "");
+    setEditPersonaId(usuario.personaId || "");
+  };
+
+  const handleSeleccionarPersonaEdicion = (persona) => {
+    setEditNombreCompleto(persona.nombre);
+    setEditCorreo(persona.correo || "");
+    setEditPersonaId(persona.id);
   };
 
   const cancelarEdicionPerfil = () => {
@@ -232,14 +309,14 @@ export default function AdminUsuarios() {
       const response = await apiFetch(`/auth/usuarios/${usuarioId}/perfil`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombreCompleto: editNombreCompleto.trim(), correo: editCorreo.trim() })
+        body: JSON.stringify({ nombreCompleto: editNombreCompleto.trim(), correo: editCorreo.trim(), personaId: editPersonaId })
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         showToast(data?.Message || "No se pudo actualizar el perfil", "warn");
         return;
       }
-      setUsuarios((prev) => prev.map((u) => (u.id === usuarioId ? { ...u, nombreCompleto: editNombreCompleto.trim(), correo: editCorreo.trim() } : u)));
+      setUsuarios((prev) => prev.map((u) => (u.id === usuarioId ? { ...u, nombreCompleto: editNombreCompleto.trim(), correo: editCorreo.trim(), personaId: editPersonaId || u.personaId } : u)));
       showToast("✓ Perfil actualizado", "ok");
       cancelarEdicionPerfil();
     } catch (error) {
@@ -312,29 +389,19 @@ export default function AdminUsuarios() {
       </div>
 
       <form onSubmit={handleCrear} style={{ background: "#f8f9fa", padding: "20px", borderRadius: "8px", border: "1px solid #e3e8ee", marginBottom: "30px" }}>
-        {autorizadores.length > 0 && (
-          <div className="field">
-            <label>Autocompletar desde Autorizadores</label>
-            <select
-              value={autorizadorSeleccionado}
-              onChange={(e) => handleSeleccionarAutorizador(e.target.value)}
-              disabled={creando}
-            >
-              <option value="">Seleccionar...</option>
-              {autorizadores.map((a) => (
-                <option key={a.id} value={a.id}>{a.nombre}</option>
-              ))}
-            </select>
-          </div>
-        )}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Usuario</label>
             <input type="text" value={nombreUsuario} onChange={(e) => setNombreUsuario(e.target.value)} disabled={creando} autoComplete="off" />
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
-            <label>Nombre completo</label>
-            <input type="text" value={nombreCompleto} onChange={(e) => setNombreCompleto(e.target.value)} disabled={creando} />
+            <label>Nombre completo (busca en Personas)</label>
+            <PersonaBuscador
+              nombre={nombreCompleto}
+              onChangeNombre={(texto) => { setNombreCompleto(texto); setPersonaId(""); }}
+              onSeleccionar={handleSeleccionarPersona}
+              disabled={creando}
+            />
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Correo</label>
@@ -434,8 +501,13 @@ export default function AdminUsuarios() {
                         </div>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", maxWidth: "560px" }}>
                           <div className="field" style={{ marginBottom: 0 }}>
-                            <label>Nombre completo</label>
-                            <input type="text" value={editNombreCompleto} onChange={(e) => setEditNombreCompleto(e.target.value)} disabled={savingPerfil} />
+                            <label>Nombre completo (busca en Personas)</label>
+                            <PersonaBuscador
+                              nombre={editNombreCompleto}
+                              onChangeNombre={(texto) => setEditNombreCompleto(texto)}
+                              onSeleccionar={handleSeleccionarPersonaEdicion}
+                              disabled={savingPerfil}
+                            />
                           </div>
                           <div className="field" style={{ marginBottom: 0 }}>
                             <label>Correo</label>
@@ -502,8 +574,6 @@ export default function AdminUsuarios() {
           </table>
         </div>
       )}
-
-      <AdminAutorizadores />
     </div>
   );
 }

@@ -1,7 +1,9 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import sql from "mssql";
 import { authDb, getPermisosDeUsuario } from "../database/authDb.js";
+import { conexion, BasesDeDatos } from "../database/database.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 
 const router = Router();
@@ -64,13 +66,14 @@ router.get("/me", requireAuth, (req, res) => {
 
 router.get("/usuarios", requireAuth, requireAdmin, (req, res) => {
     const usuarios = authDb
-        .prepare(`SELECT id, nombre_usuario, nombre_completo, correo, is_admin, activo FROM usuarios ORDER BY nombre_completo`)
+        .prepare(`SELECT id, nombre_usuario, nombre_completo, correo, persona_id, is_admin, activo FROM usuarios ORDER BY nombre_completo`)
         .all();
     res.json(usuarios.map((u) => ({
         id: u.id,
         nombreUsuario: u.nombre_usuario,
         nombreCompleto: u.nombre_completo,
         correo: u.correo,
+        personaId: u.persona_id,
         isAdmin: !!u.is_admin,
         activo: !!u.activo,
         permisos: getPermisosDeUsuario(u.id)
@@ -79,7 +82,7 @@ router.get("/usuarios", requireAuth, requireAdmin, (req, res) => {
 
 router.post("/usuarios", requireAuth, requireAdmin, async (req, res) => {
     try {
-        const { nombreUsuario, nombreCompleto, correo, password, isAdmin, permisos } = req.body;
+        const { nombreUsuario, nombreCompleto, correo, personaId, password, isAdmin, permisos } = req.body;
         if (!nombreUsuario?.trim() || !nombreCompleto?.trim() || !password) {
             return res.status(400).json({ Message: "Usuario, nombre completo y contraseña son requeridos." });
         }
@@ -91,8 +94,8 @@ router.post("/usuarios", requireAuth, requireAdmin, async (req, res) => {
 
         const passwordHash = await bcrypt.hash(password, 10);
         const result = authDb
-            .prepare(`INSERT INTO usuarios (nombre_usuario, nombre_completo, correo, password_hash, is_admin) VALUES (?, ?, ?, ?, ?)`)
-            .run(nombreUsuario.trim(), nombreCompleto.trim(), correo?.trim() || null, passwordHash, isAdmin ? 1 : 0);
+            .prepare(`INSERT INTO usuarios (nombre_usuario, nombre_completo, correo, persona_id, password_hash, is_admin) VALUES (?, ?, ?, ?, ?, ?)`)
+            .run(nombreUsuario.trim(), nombreCompleto.trim(), correo?.trim() || null, personaId?.trim() || null, passwordHash, isAdmin ? 1 : 0);
 
         const usuarioId = Number(result.lastInsertRowid);
         const insertPermiso = authDb.prepare(`INSERT OR IGNORE INTO permisos (usuario_id, area_key, modulo_key) VALUES (?, ?, ?)`);
@@ -146,17 +149,20 @@ router.put("/usuarios/:id/password", requireAuth, requireAdmin, async (req, res)
 
 router.put("/usuarios/:id/perfil", requireAuth, requireAdmin, (req, res) => {
     const usuarioId = Number(req.params.id);
-    const { nombreCompleto, correo } = req.body;
+    const { nombreCompleto, correo, personaId } = req.body;
     if (!nombreCompleto?.trim()) {
         return res.status(400).json({ Message: "El nombre completo es requerido." });
     }
-    const usuario = authDb.prepare(`SELECT id FROM usuarios WHERE id = ?`).get(usuarioId);
+    const usuario = authDb.prepare(`SELECT id, persona_id FROM usuarios WHERE id = ?`).get(usuarioId);
     if (!usuario) {
         return res.status(404).json({ Message: "No se encontró el usuario." });
     }
+    // Si no se volvió a buscar/seleccionar una Persona al editar, se conserva la que ya tenía
+    // en vez de borrarla (solo se reemplaza cuando personaId viene explícito en el body).
+    const nuevoPersonaId = personaId?.trim() || usuario.persona_id || null;
     authDb
-        .prepare(`UPDATE usuarios SET nombre_completo = ?, correo = ? WHERE id = ?`)
-        .run(nombreCompleto.trim(), correo?.trim() || null, usuarioId);
+        .prepare(`UPDATE usuarios SET nombre_completo = ?, correo = ?, persona_id = ? WHERE id = ?`)
+        .run(nombreCompleto.trim(), correo?.trim() || null, nuevoPersonaId, usuarioId);
     return res.json({ Message: "Perfil actualizado con éxito" });
 });
 
@@ -167,69 +173,52 @@ router.put("/usuarios/:id/activo", requireAuth, requireAdmin, (req, res) => {
     return res.json({ Message: activo ? "Usuario activado" : "Usuario desactivado" });
 });
 
-// --- Administración de Autorizadores (solo admin) ---
-// Personas que pueden aparecer en "Autorizado por" al ejecutar acciones. Se resuelve
-// automáticamente contra el usuario que inició sesión (por nombre completo), para que
-// nadie pueda autorizar una acción a nombre de otra persona.
+// --- Búsqueda de Personas (solo admin, para elegir a quién vincular un usuario) ---
+// Reemplaza a la vieja tabla "autorizadores": en vez de mantener una lista aparte,
+// se busca en vivo contra la BD real de Personas y se toma su Id (uniqueidentifier)
+// como el ID real que se manda como ModifiedBy/UsuarioId a los servicios externos.
 
-function mapAutorizador(a) {
-    return { id: a.id, nombre: a.nombre, externalId: a.external_id, correo: a.correo };
-}
-
-router.get("/autorizadores", requireAuth, requireAdmin, (req, res) => {
-    const autorizadores = authDb.prepare(`SELECT * FROM autorizadores ORDER BY nombre`).all();
-    res.json(autorizadores.map(mapAutorizador));
-});
-
-router.post("/autorizadores", requireAuth, requireAdmin, (req, res) => {
+router.post("/personas/buscar", requireAuth, requireAdmin, async (req, res) => {
     try {
-        const { nombre, externalId, correo } = req.body;
-        if (!nombre?.trim() || !externalId?.trim()) {
-            return res.status(400).json({ Message: "Nombre e ID de la persona son requeridos." });
+        const { texto } = req.body;
+        const palabras = (texto || "").trim().split(/\s+/).filter(Boolean);
+        if (palabras.length === 0) {
+            return res.json([]);
         }
-        const result = authDb
-            .prepare(`INSERT INTO autorizadores (nombre, external_id, correo) VALUES (?, ?, ?)`)
-            .run(nombre.trim(), externalId.trim(), correo?.trim() || null);
-        return res.status(201).json({ Message: "Autorizador creado con éxito", Id: Number(result.lastInsertRowid) });
-    } catch (error) {
-        console.error("Error en crear autorizador:", error);
-        return res.status(500).json({ Message: "Error interno del servidor", Error: error.message });
-    }
-});
 
-router.put("/autorizadores/:id", requireAuth, requireAdmin, (req, res) => {
-    try {
-        const autorizadorId = Number(req.params.id);
-        const { nombre, externalId, correo } = req.body;
-        if (!nombre?.trim() || !externalId?.trim()) {
-            return res.status(400).json({ Message: "Nombre e ID de la persona son requeridos." });
-        }
-        const existente = authDb.prepare(`SELECT id FROM autorizadores WHERE id = ?`).get(autorizadorId);
-        if (!existente) {
-            return res.status(404).json({ Message: "No se encontró el autorizador." });
-        }
-        authDb
-            .prepare(`UPDATE autorizadores SET nombre = ?, external_id = ?, correo = ? WHERE id = ?`)
-            .run(nombre.trim(), externalId.trim(), correo?.trim() || null, autorizadorId);
-        return res.json({ Message: "Autorizador actualizado con éxito" });
-    } catch (error) {
-        console.error("Error en actualizar autorizador:", error);
-        return res.status(500).json({ Message: "Error interno del servidor", Error: error.message });
-    }
-});
+        const pool = await conexion(BasesDeDatos.Personas);
+        const request = pool.request();
+        const condiciones = palabras.map((palabra, i) => {
+            const nombre = `p${i}`;
+            request.input(nombre, sql.VarChar, `%${palabra}%`);
+            return `(Nombre LIKE @${nombre} OR Apellido LIKE @${nombre})`;
+        });
 
-router.delete("/autorizadores/:id", requireAuth, requireAdmin, (req, res) => {
-    const autorizadorId = Number(req.params.id);
-    authDb.prepare(`DELETE FROM autorizadores WHERE id = ?`).run(autorizadorId);
-    return res.json({ Message: "Autorizador eliminado con éxito" });
+        const resultado = await request.query(`
+            SELECT TOP 10 Id, Nombre, Apellido, NombreUsuario
+            FROM [dbo].[Persona]
+            WHERE ${condiciones.join(" AND ")}
+              AND IsSoftDeleted = 0
+            ORDER BY Nombre, Apellido
+        `);
+
+        res.json(resultado.recordset.map((p) => ({
+            id: p.Id,
+            nombre: `${p.Nombre} ${p.Apellido}`.trim(),
+            correo: p.NombreUsuario
+        })));
+    } catch (error) {
+        console.error("Error en buscar personas:", error);
+        return res.status(500).json({ Message: "Error al buscar en Personas", Error: error.message });
+    }
 });
 
 router.get("/autorizador-actual", requireAuth, (req, res) => {
-    const user = authDb.prepare(`SELECT nombre_completo FROM usuarios WHERE id = ?`).get(req.user.id);
-    const autorizador = user
-        ? authDb.prepare(`SELECT * FROM autorizadores WHERE nombre = ?`).get(user.nombre_completo)
-        : null;
-    res.json(autorizador ? mapAutorizador(autorizador) : null);
+    const user = authDb.prepare(`SELECT nombre_completo, correo, persona_id FROM usuarios WHERE id = ?`).get(req.user.id);
+    if (!user || !user.persona_id) {
+        return res.json(null);
+    }
+    res.json({ nombre: user.nombre_completo, externalId: user.persona_id, correo: user.correo });
 });
 
 export default router;
