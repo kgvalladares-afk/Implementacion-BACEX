@@ -15,13 +15,20 @@ function readStoredSession() {
 }
 
 export function AuthProvider({ children }) {
-  const [session, setSession] = useState(readStoredSession);
-
-  useEffect(() => {
-    setAuthToken(session?.token || null);
-  }, [session]);
+  // El token se sincroniza de forma síncrona (no en un useEffect) porque los efectos
+  // de los componentes hijos (ej. ActividadReciente, que llama a la API apenas se
+  // monta la pantalla de Inicio) se ejecutan ANTES que el useEffect de este padre.
+  // Si el token solo se guardara ahí, la primera petición autenticada tras iniciar
+  // sesión salía sin token, el servidor respondía 401 y eso disparaba un logout
+  // inmediato (se veía como si el botón de iniciar sesión "no hiciera nada").
+  const [session, setSession] = useState(() => {
+    const inicial = readStoredSession();
+    setAuthToken(inicial?.token || null);
+    return inicial;
+  });
 
   const logout = useCallback(() => {
+    setAuthToken(null);
     setSession(null);
     localStorage.removeItem(STORAGE_KEY);
   }, []);
@@ -66,6 +73,7 @@ export function AuthProvider({ children }) {
       throw new Error(data?.Message || "No se pudo iniciar sesión");
     }
     const newSession = { token: data.Token, usuario: data.Usuario };
+    setAuthToken(newSession.token);
     setSession(newSession);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newSession));
   }, []);
