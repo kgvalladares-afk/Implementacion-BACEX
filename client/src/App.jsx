@@ -5,6 +5,7 @@ import { ToastProvider } from "./components/Toast.jsx";
 import { AuthProvider, useAuth } from "./auth/AuthContext.jsx";
 import Login from "./auth/Login.jsx";
 import AdminUsuarios, { meta as adminUsuariosMeta } from "./auth/AdminUsuarios.jsx";
+import ActividadReciente from "./components/ActividadReciente.jsx";
 
 const ADMIN_KEY = "__admin__";
 
@@ -66,6 +67,9 @@ function AppShell() {
   const [activeModule, setActiveModule] = useState(null);
   const [expandedAreas, setExpandedAreas] = useState(() => new Set());
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Qué área quedó "abierta" dentro de las tarjetas de acceso directo de Inicio,
+  // para mostrar sus submódulos ahí mismo en vez de mandar a mirar el sidebar.
+  const [homeAreaKey, setHomeAreaKey] = useState(null);
 
   const toggleAreaExpand = (areaKey) => {
     setExpandedAreas((prev) => {
@@ -273,6 +277,49 @@ function AppShell() {
                 <h1>{saludo}{usuario.nombreCompleto ? `, ${usuario.nombreCompleto}` : ""}</h1>
                 <p style={{ textTransform: "capitalize" }}>{fechaHoy}</p>
               </div>
+
+              {(() => {
+                const todasAreas = [...Object.entries(visibleAreas), ...(usuario.isAdmin ? [[ADMIN_KEY, adminArea]] : [])];
+                const areaAbierta = todasAreas.find(([areaKey]) => areaKey === homeAreaKey);
+
+                if (areaAbierta) {
+                  const [areaKey, area] = areaAbierta;
+                  return (
+                    <div style={{ position: "relative", zIndex: 1 }}>
+                      <button className="back-btn" onClick={() => setHomeAreaKey(null)} style={{ marginBottom: "12px" }}>← {area.label}</button>
+                      <div className="home-grid">
+                        {Object.entries(area.modules).map(([moduloKey, modulo]) => (
+                          <div
+                            key={moduloKey}
+                            className={`home-card${modulo.kind === "danger" ? " danger" : ""}`}
+                            onClick={() => handleSelectModule(areaKey, moduloKey)}
+                          >
+                            <div className={`card-icon${modulo.kind === "danger" ? " red" : ""}`}>{modulo.icon}</div>
+                            <h4>{modulo.label}</h4>
+                            <p>{modulo.desc}</p>
+                            <div className="card-arr">→</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="home-grid" style={{ position: "relative", zIndex: 1 }}>
+                    {todasAreas.map(([areaKey, area]) => (
+                      <div key={areaKey} className="home-card" onClick={() => setHomeAreaKey(areaKey)}>
+                        <div className="card-icon">{area.icon || "👤"}</div>
+                        <h4>{area.label}</h4>
+                        <p>{Object.keys(area.modules).length} módulo{Object.keys(area.modules).length !== 1 ? "s" : ""}</p>
+                        <div className="card-arr">→</div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              <ActividadReciente limite={10} />
             </div>
           ) : (
             <>

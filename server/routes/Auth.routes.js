@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import sql from "mssql";
-import { authDb, getPermisosDeUsuario } from "../database/authDb.js";
+import { authDb, getPermisosDeUsuario, registrarActividad } from "../database/authDb.js";
 import { conexion, BasesDeDatos } from "../database/database.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 
@@ -103,6 +103,15 @@ router.post("/usuarios", requireAuth, requireAdmin, async (req, res) => {
             insertPermiso.run(usuarioId, p.area, p.modulo);
         }
 
+        registrarActividad({
+            usuarioNombre: req.user.nombreCompleto,
+            areaKey: "admin",
+            areaLabel: "Administración",
+            moduloKey: "usuarios",
+            moduloLabel: "Usuarios",
+            accion: `Creó el usuario ${nombreCompleto.trim()}`
+        });
+
         return res.status(201).json({ Message: "Usuario creado con éxito", Id: usuarioId });
     } catch (error) {
         console.error("Error en crear usuario:", error);
@@ -120,6 +129,16 @@ router.put("/usuarios/:id/permisos", requireAuth, requireAdmin, (req, res) => {
         insertPermiso.run(usuarioId, p.area, p.modulo);
     }
 
+    const usuario = authDb.prepare(`SELECT nombre_completo FROM usuarios WHERE id = ?`).get(usuarioId);
+    registrarActividad({
+        usuarioNombre: req.user.nombreCompleto,
+        areaKey: "admin",
+        areaLabel: "Administración",
+        moduloKey: "usuarios",
+        moduloLabel: "Usuarios",
+        accion: `Actualizó los permisos de ${usuario?.nombre_completo || "un usuario"}`
+    });
+
     return res.json({ Message: "Permisos actualizados con éxito" });
 });
 
@@ -132,13 +151,22 @@ router.put("/usuarios/:id/password", requireAuth, requireAdmin, async (req, res)
             return res.status(400).json({ Message: "La contraseña debe tener al menos 6 caracteres." });
         }
 
-        const usuario = authDb.prepare(`SELECT id FROM usuarios WHERE id = ?`).get(usuarioId);
+        const usuario = authDb.prepare(`SELECT id, nombre_completo FROM usuarios WHERE id = ?`).get(usuarioId);
         if (!usuario) {
             return res.status(404).json({ Message: "No se encontró el usuario." });
         }
 
         const passwordHash = await bcrypt.hash(password, 10);
         authDb.prepare(`UPDATE usuarios SET password_hash = ? WHERE id = ?`).run(passwordHash, usuarioId);
+
+        registrarActividad({
+            usuarioNombre: req.user.nombreCompleto,
+            areaKey: "admin",
+            areaLabel: "Administración",
+            moduloKey: "usuarios",
+            moduloLabel: "Usuarios",
+            accion: `Cambió la contraseña de ${usuario.nombre_completo}`
+        });
 
         return res.json({ Message: "Contraseña actualizada con éxito" });
     } catch (error) {
@@ -163,6 +191,16 @@ router.put("/usuarios/:id/perfil", requireAuth, requireAdmin, (req, res) => {
     authDb
         .prepare(`UPDATE usuarios SET nombre_completo = ?, correo = ?, persona_id = ? WHERE id = ?`)
         .run(nombreCompleto.trim(), correo?.trim() || null, nuevoPersonaId, usuarioId);
+
+    registrarActividad({
+        usuarioNombre: req.user.nombreCompleto,
+        areaKey: "admin",
+        areaLabel: "Administración",
+        moduloKey: "usuarios",
+        moduloLabel: "Usuarios",
+        accion: `Actualizó el perfil de ${nombreCompleto.trim()}`
+    });
+
     return res.json({ Message: "Perfil actualizado con éxito" });
 });
 
@@ -170,6 +208,17 @@ router.put("/usuarios/:id/activo", requireAuth, requireAdmin, (req, res) => {
     const usuarioId = Number(req.params.id);
     const { activo } = req.body;
     authDb.prepare(`UPDATE usuarios SET activo = ? WHERE id = ?`).run(activo ? 1 : 0, usuarioId);
+
+    const usuario = authDb.prepare(`SELECT nombre_completo FROM usuarios WHERE id = ?`).get(usuarioId);
+    registrarActividad({
+        usuarioNombre: req.user.nombreCompleto,
+        areaKey: "admin",
+        areaLabel: "Administración",
+        moduloKey: "usuarios",
+        moduloLabel: "Usuarios",
+        accion: `${activo ? "Activó" : "Desactivó"} al usuario ${usuario?.nombre_completo || ""}`.trim()
+    });
+
     return res.json({ Message: activo ? "Usuario activado" : "Usuario desactivado" });
 });
 

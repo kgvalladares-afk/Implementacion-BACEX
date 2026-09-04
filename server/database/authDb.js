@@ -26,6 +26,16 @@ authDb.exec(`
     UNIQUE(usuario_id, area_key, modulo_key)
   );
 
+  CREATE TABLE IF NOT EXISTS actividad (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_nombre TEXT NOT NULL,
+    area_key TEXT NOT NULL,
+    area_label TEXT NOT NULL,
+    modulo_key TEXT,
+    modulo_label TEXT,
+    accion TEXT NOT NULL,
+    created_date TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // La tabla usuarios ya existía sin estas columnas; se agregan aparte porque
@@ -47,4 +57,16 @@ export function getPermisosDeUsuario(usuarioId) {
   return authDb
     .prepare(`SELECT area_key AS area, modulo_key AS modulo FROM permisos WHERE usuario_id = ?`)
     .all(usuarioId);
+}
+
+// Registro de actividad para el widget "Actividad reciente" de Inicio. Se llama desde
+// las rutas después de que una acción se aplicó con éxito de verdad (no antes de validar).
+export function registrarActividad({ usuarioNombre, areaKey, areaLabel, moduloKey, moduloLabel, accion }) {
+  try {
+    authDb
+      .prepare(`INSERT INTO actividad (usuario_nombre, area_key, area_label, modulo_key, modulo_label, accion) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(usuarioNombre || "—", areaKey, areaLabel, moduloKey || null, moduloLabel || null, accion);
+  } catch (error) {
+    console.error("Error al registrar actividad:", error);
+  }
 }

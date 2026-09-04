@@ -2,6 +2,7 @@ import { Router } from "express";
 import { conexion, BasesDeDatos } from '../database/database.js'
 import sql from 'mssql'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
+import { registrarActividad } from '../database/authDb.js'
 
 const app = Router();
 app.use(requireAuth);
@@ -116,6 +117,15 @@ app.post('/actualizarAnalisisVigente', requirePermission('red', 'matriz'), async
             return res.status(400).json({ Message: mensaje || "El servicio rechazó la solicitud." });
         }
 
+        registrarActividad({
+            usuarioNombre: req.user.nombreCompleto,
+            areaKey: "red",
+            areaLabel: "Análisis de Red",
+            moduloKey: "matriz",
+            moduloLabel: "Matriz",
+            accion: `Marcó el Análisis ${analisisId} como ${vigente ? "Vigente" : "No Vigente"}`
+        });
+
         return res.status(200).json({ Message: "Análisis actualizado con éxito", Data: data });
 
     } catch (error) {
@@ -188,6 +198,15 @@ app.post('/actualizarHaSidoEvaluado', requirePermission('red', 'matriz'), async 
             const mensaje = Array.isArray(data.Message) ? data.Message.join(' ') : data.Message;
             return res.status(400).json({ Message: mensaje || "El servicio rechazó la solicitud." });
         }
+
+        registrarActividad({
+            usuarioNombre: req.user.nombreCompleto,
+            areaKey: "red",
+            areaLabel: "Análisis de Red",
+            moduloKey: "matriz",
+            moduloLabel: "Matriz",
+            accion: `Marcó la Referencia Operativa ${referenciaOperativaId} como ${haSidoEvaluado ? "Evaluada" : "No Evaluada"}`
+        });
 
         return res.status(200).json({ Message: "Referencia Operativa actualizada con éxito", Data: data });
 

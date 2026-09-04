@@ -661,6 +661,60 @@ body {
   transform: translateX(3px);
 }
 
+/* ACTIVIDAD RECIENTE */
+
+.actividad-titulo {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-strong, #1f2a37);
+  margin: 0 0 12px;
+}
+
+.actividad-tabla-wrap {
+  border: 1px solid var(--border-color, #e6e8eb);
+  border-radius: 10px;
+  overflow: hidden;
+  overflow-x: auto;
+}
+
+.actividad-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.actividad-tabla thead th {
+  text-align: left;
+  padding: 10px 14px;
+  background: #f7f8fa;
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border-color, #e6e8eb);
+  white-space: nowrap;
+}
+
+.actividad-tabla tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f1f3;
+  color: #333;
+  white-space: nowrap;
+}
+
+.actividad-tabla tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.actividad-tabla tbody td:nth-child(3) {
+  white-space: normal;
+}
+
+.actividad-vacio {
+  text-align: center;
+  color: #9aa1ab;
+  padding: 18px !important;
+}
+
 /* FORMULARIOS */
 
 .form-wrap {

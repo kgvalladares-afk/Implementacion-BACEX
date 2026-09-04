@@ -13,7 +13,7 @@ export function requireAuth(req, res, next) {
     // los cambios hechos por un administrador surtan efecto de inmediato,
     // sin esperar a que la sesión expire o el usuario vuelva a iniciar sesión.
     const user = authDb
-      .prepare(`SELECT id, nombre_usuario, is_admin, activo FROM usuarios WHERE id = ?`)
+      .prepare(`SELECT id, nombre_usuario, nombre_completo, is_admin, activo FROM usuarios WHERE id = ?`)
       .get(payload.id);
 
     if (!user || !user.activo) {
@@ -23,6 +23,7 @@ export function requireAuth(req, res, next) {
     req.user = {
       id: user.id,
       nombreUsuario: user.nombre_usuario,
+      nombreCompleto: user.nombre_completo,
       isAdmin: !!user.is_admin,
       permisos: getPermisosDeUsuario(user.id)
     };

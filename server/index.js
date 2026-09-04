@@ -9,6 +9,7 @@ import hrRoutes from './routes/Hr.routes.js'
 import analisisRoutes from './routes/Analisis.routes.js'
 import seguimientoRoutes from './routes/Seguimiento.routes.js'
 import authRoutes from './routes/Auth.routes.js'
+import actividadRoutes from './routes/Actividad.routes.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const clienteDist = path.join(__dirname, '../client/dist')
@@ -54,6 +55,7 @@ app.use('/api', corsOptions, cfoRoutes);
 app.use('/api', corsOptions, hrRoutes);
 app.use('/api', corsOptions, analisisRoutes);
 app.use('/api', corsOptions, seguimientoRoutes);
+app.use('/api', corsOptions, actividadRoutes);
 
 // En producción, el mismo servidor sirve el build del cliente (client/dist), evitando
 // tener que desplegar y configurar dos servicios/dominios separados.

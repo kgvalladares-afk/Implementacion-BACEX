@@ -2,6 +2,7 @@ import { Router } from "express";
 import { conexion, BasesDeDatos } from '../database/database.js'
 import sql from 'mssql'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
+import { registrarActividad } from '../database/authDb.js'
 
 const app = Router();
 app.use(requireAuth);
@@ -79,6 +80,15 @@ app.post('/habilitarSalesOrder', requirePermission('cfo', 'salesorder'), async (
         if (data?.IsValid === false) {
             return res.status(400).json({ Message: mensajeDeAzure(data) || "Azure rechazó la solicitud." });
         }
+
+        registrarActividad({
+            usuarioNombre: req.user.nombreCompleto,
+            areaKey: "cfo",
+            areaLabel: "CFO",
+            moduloKey: "salesorder",
+            moduloLabel: "Habilitar SalesOrder",
+            accion: `Habilitó la Sales Order ${ReferenciaOperativa}`
+        });
 
         return res.status(200).json({ Message: "Sales Order Habilitada con éxito", Data: data });
 
@@ -241,6 +251,15 @@ app.post('/habilitarDocumento', requirePermission('cfo', 'habDoc'), async (req, 
 
         // Azure ya actualiza tanto el estado como el dueño (Vesta → Cliente) en su respuesta;
         // no hace falta (ni tenemos permiso de UPDATE) tocar la tabla directamente nosotros.
+        registrarActividad({
+            usuarioNombre: req.user.nombreCompleto,
+            areaKey: "cfo",
+            areaLabel: "CFO",
+            moduloKey: "habDoc",
+            moduloLabel: "Habilitar Documento",
+            accion: `Habilitó el documento ${DocumentoId}`
+        });
+
         return res.status(200).json({ Message: "Documento habilitado con éxito", Data: data });
 
     } catch (error) {
@@ -308,6 +327,15 @@ app.post('/deshabilitarDocumento', requirePermission('cfo', 'habDoc'), async (re
         if (data?.IsValid === false) {
             return res.status(400).json({ Message: mensajeDeAzure(data) || "Azure rechazó la solicitud." });
         }
+
+        registrarActividad({
+            usuarioNombre: req.user.nombreCompleto,
+            areaKey: "cfo",
+            areaLabel: "CFO",
+            moduloKey: "habDoc",
+            moduloLabel: "Habilitar Documento",
+            accion: `Deshabilitó el documento ${DocumentoId}`
+        });
 
         return res.status(200).json({ Message: "Documento deshabilitado con éxito", Data: data });
 
@@ -446,6 +474,15 @@ app.post('/eliminarDocumento', requirePermission('cfo', 'elimDoc'), async (req, 
             return res.status(400).json({ Message: mensajeDeAzure(data) || "Azure rechazó la solicitud." });
         }
 
+        registrarActividad({
+            usuarioNombre: req.user.nombreCompleto,
+            areaKey: "cfo",
+            areaLabel: "CFO",
+            moduloKey: "elimDoc",
+            moduloLabel: "Eliminar Documento",
+            accion: `Eliminó el documento ${DocumentoId}`
+        });
+
         return res.status(200).json({ Message: "Documento eliminado con éxito", Data: data });
 
     } catch (error) {
@@ -548,6 +585,15 @@ app.post('/eliminarContrarecibo', requirePermission('cfo', 'contrarecibo'), asyn
         if (data?.IsValid === false) {
             return res.status(400).json({ Message: mensajeDeAzure(data) || "Azure rechazó la solicitud." });
         }
+
+        registrarActividad({
+            usuarioNombre: req.user.nombreCompleto,
+            areaKey: "cfo",
+            areaLabel: "CFO",
+            moduloKey: "contrarecibo",
+            moduloLabel: "Eliminar ContraRecibo",
+            accion: `Eliminó el contrarecibo ${Id}`
+        });
 
         return res.status(200).json({ Message: "Contrarecibo eliminado con éxito", Data: data });
 
@@ -691,6 +737,15 @@ app.post('/redondearDocumentos', requirePermission('cfo', 'redondeo'), async (re
             return res.status(400).json({ Message: mensajeDeAzure(data) || "Azure rechazó la solicitud." });
         }
 
+        registrarActividad({
+            usuarioNombre: req.user.nombreCompleto,
+            areaKey: "cfo",
+            areaLabel: "CFO",
+            moduloKey: "redondeo",
+            moduloLabel: "Redondeo de Documentos",
+            accion: `Redondeó ${Ids.length} documento(s)`
+        });
+
         return res.status(200).json({ Message: "Documentos redondeados con éxito", Data: data });
 
     } catch (error) {
@@ -823,6 +878,15 @@ app.post('/actualizarComponente', requirePermission('cfo', 'cambio'), async (req
             return res.status(400).json({ Message: mensajeDeAzure(data) || "Azure rechazó la solicitud." });
         }
 
+        registrarActividad({
+            usuarioNombre: req.user.nombreCompleto,
+            areaKey: "cfo",
+            areaLabel: "CFO",
+            moduloKey: "cambio",
+            moduloLabel: "Cambio de Componente",
+            accion: `Actualizó el componente del detalle ${SalesOrderDetalleId}`
+        });
+
         return res.status(200).json({ Message: "Componente actualizado con éxito", Data: data });
 
     } catch (error) {
@@ -903,6 +967,15 @@ app.post('/crearDocumentoProvisionalNic', requirePermission('cfo', 'docProvision
         if (data?.IsValid === false) {
             return res.status(400).json({ Message: mensajeDeAzure(data) || "Azure rechazó la solicitud." });
         }
+
+        registrarActividad({
+            usuarioNombre: req.user.nombreCompleto,
+            areaKey: "cfo",
+            areaLabel: "CFO",
+            moduloKey: "docProvisionalNic",
+            moduloLabel: "Documento Provisional NIC (Proveedores)",
+            accion: `Creó un Documento Provisional NIC para ${ReferenciaOperativa}`
+        });
 
         return res.status(200).json({ Message: "Documento Provisional creado con éxito", Data: data });
 
@@ -1094,6 +1167,15 @@ app.post('/anularFacturas', requirePermission('cfo', 'anulacionFacturas'), async
         if (data?.IsValid === false) {
             return res.status(400).json({ Message: mensajeDeAzure(data) || "Azure rechazó la solicitud." });
         }
+
+        registrarActividad({
+            usuarioNombre: req.user.nombreCompleto,
+            areaKey: "cfo",
+            areaLabel: "CFO",
+            moduloKey: "anulacionFacturas",
+            moduloLabel: "Anulación de Facturas",
+            accion: `Anuló ${facturas.length} factura(s): ${facturas.join(", ")}`
+        });
 
         return res.status(200).json({ Message: "Factura(s) anulada(s) con éxito", Data: data });
 
